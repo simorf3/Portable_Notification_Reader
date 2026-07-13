@@ -97,6 +97,25 @@ impl App {
         say_queue: SayQueue,
         preview: PreviewSlot,
     ) -> Result<(Rc<App>, Vec<nwg::EventHandler>), nwg::NwgError> {
+        // Use the modern Windows UI font for every control. Without this, nwg
+        // falls back to the ancient "System" bitmap font, which renders far too
+        // small and looks cramped/ugly. Setting a global default makes every
+        // control built afterwards inherit Segoe UI at a sensible size.
+        let mut ui_font = nwg::Font::default();
+        nwg::Font::builder()
+            .family("Segoe UI")
+            .size(18)
+            .build(&mut ui_font)?;
+        nwg::Font::set_global_default(Some(ui_font));
+
+        // A bold copy for the "mode" line so the whitelist/blacklist state stands out.
+        let mut bold_font = nwg::Font::default();
+        nwg::Font::builder()
+            .family("Segoe UI")
+            .size(18)
+            .weight(700)
+            .build(&mut bold_font)?;
+
         let mut window = nwg::MessageWindow::default();
         nwg::MessageWindow::builder().build(&mut window)?;
 
@@ -117,7 +136,7 @@ impl App {
         nwg::Window::builder()
             .title("Notification Filters")
             .flags(nwg::WindowFlags::WINDOW) // title + close, non-resizable, hidden
-            .size((480, 430))
+            .size((490, 470))
             .center(true)
             .build(&mut fwindow)?;
 
@@ -137,8 +156,9 @@ impl App {
         nwg::Label::builder()
             .text("Mode: no rules \u{2013} every notification is read.")
             .parent(&fwindow)
+            .font(Some(&bold_font))
             .position((12, 76))
-            .size((456, 20))
+            .size((456, 22))
             .build(&mut fmode)?;
 
         let mut flist = nwg::ListBox::default();
