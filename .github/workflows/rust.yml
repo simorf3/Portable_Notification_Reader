@@ -41,7 +41,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item "target\x86_64-pc-windows-msvc\release\portable_notification_reader.exe" `
+          Copy-Item "target\x86_64-pc-windows-msvc\release\PortableNotificationReader.exe" `
                     "dist\PortableNotificationReader.exe"
           Copy-Item "README.md"  "dist\README.md"
           Copy-Item "LICENSE"    "dist\LICENSE.txt"
