@@ -66,6 +66,56 @@ cargo build --release
 
 ---
 
+## ⚠️ "Windows protected your PC" (SmartScreen)
+
+When you first run the downloaded `.exe`, Windows may show a blue
+**"Windows protected your PC"** dialog from *Microsoft Defender SmartScreen*.
+
+**This is expected and the app is safe to run.** SmartScreen flags **any**
+program that isn't signed with a paid *code-signing certificate*
+(these cost US$200–500 **per year**, which isn't worth it for a free hobby
+app). The warning is about the **missing signature, not about anything the app
+does** — the full source code is in this repository for anyone to inspect.
+
+### How to run it anyway
+
+1. On the blue dialog, click **More info**.
+2. Click the **Run anyway** button that appears.
+
+You only have to do this **once per download** — Windows remembers your choice
+for that copy of the file.
+
+### Verify your download first (recommended)
+
+Every release publishes the **SHA-256 hash** of the exe (in the release notes
+and as a `PortableNotificationReader.exe.sha256` file). Confirm your copy
+matches before running it:
+
+```powershell
+Get-FileHash .\PortableNotificationReader.exe -Algorithm SHA256
+```
+
+Compare the output to the hash on the [Releases](../../releases) page — if they
+match, the file is exactly what the CI built.
+
+### Prefer no warning at all? Two free options
+
+- **Build it yourself** from source (see above). Locally-compiled executables
+  are not flagged by SmartScreen.
+- **Add a trusted publisher.** Releases can be **self-signed** (see
+  [`scripts/self_sign.ps1`](scripts/self_sign.ps1)). A self-signed certificate
+  does *not* silence the first warning, but once you install its certificate
+  into **Trusted Publishers**, future versions signed with the same certificate
+  run without a prompt. Right-click the exe → **Properties → Digital Signatures
+  → Details → View Certificate → Install Certificate → Trusted Publishers**.
+
+> Signing is fully optional in CI: if the repository has the `CODESIGN_PFX_BASE64`
+> and `CODESIGN_PASSWORD` secrets set, the build signs the exe automatically;
+> otherwise it ships unsigned. See [`scripts/self_sign.ps1`](scripts/self_sign.ps1)
+> for how to generate a free self-signed certificate and the base64 secret.
+
+---
+
 ## Usage
 
 1. Put `PortableNotificationReader.exe` in any folder and run it. A tray icon

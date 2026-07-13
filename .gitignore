@@ -3,3 +3,8 @@ Cargo.lock.bak
 *.exe
 dist/
 config.json
+
+# Code-signing secrets — never commit these
+*.pfx
+*.pfx.base64.txt
+cert.pfx*
