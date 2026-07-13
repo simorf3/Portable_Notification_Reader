@@ -1,0 +1,175 @@
+# Portable Notification Reader
+
+Reads your **Windows 11 notifications aloud** using natural, online neural voices
+(with an offline fallback), controlled entirely from a small **system-tray icon**.
+
+It is a ground-up **Rust** rewrite of the original C# app, redesigned to be
+**100% portable**:
+
+- A **single `.exe`** — no installer, no MSIX package, no admin rights.
+- All settings live in **`config.json` next to the executable**. Nothing is
+  written to the registry or to AppData. Copy the folder to a USB stick and it
+  runs anywhere.
+- Notifications are read by **polling the Windows notification database directly**
+  (`%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db`), so the app
+  needs **no package identity** and no `UserNotificationListener` registration —
+  which is exactly what makes a portable, unpackaged build possible.
+
+---
+
+## Features
+
+- **Speaks new toast notifications** as they arrive (polls once per second by
+  default; configurable).
+- **Full online neural voice catalogue** (Microsoft Edge voices) fetched live,
+  including the **South-African voices**: `en-ZA` (Leah, Luke),
+  `af-ZA` (Adri, Willem) and `zu-ZA` (Thando, Themba).
+- **Voices filtered by your Windows display language** by default (e.g. an
+  English-South-Africa install shows the English voices first), with a
+  **“Show all languages”** toggle to reveal the entire catalogue.
+- **Offline SAPI voices** are always available and are used automatically as a
+  fallback when there is no internet connection.
+- **Volume with loudness boost** — 0–200%. Values above 100% amplify the audio
+  *louder than the system default* (online voices only).
+- **Speaking speed** control.
+- **Per-app mute** — any app that has sent a notification appears in the *Apps*
+  menu and can be muted/unmuted with a click.
+- **Filter rules** — block or allow notifications by substring or regex.
+- **Smart speech shaping** (matches the original app):
+  - the **app name is never read aloud**;
+  - for a **WhatsApp group**, the group name is skipped and only the
+    “Sender: message” body is read;
+  - for a one-on-one chat the contact/title is kept.
+- Left-click **or** right-click the tray icon to open the menu.
+
+---
+
+## Download / Build
+
+This is a Windows GUI app and is built by **GitHub Actions** on a Windows
+runner (the authoritative build), because it uses Win32 / WinRT APIs that can’t
+be compiled on Linux/macOS.
+
+1. Push to `main` (or use the **Actions → Build Windows executable → Run
+   workflow** button). The workflow compiles a release build and uploads
+   `PortableNotificationReader.exe` (and a zip) as a **build artifact**.
+2. To cut a versioned release, push a tag like `v1.0.0`; the same binary is
+   attached to a GitHub Release automatically.
+
+To build locally on a Windows machine with the Rust toolchain installed:
+
+```powershell
+rustup target add x86_64-pc-windows-msvc
+cargo build --release
+# -> target\release\PortableNotificationReader.exe
+```
+
+---
+
+## Usage
+
+1. Put `PortableNotificationReader.exe` in any folder and run it. A tray icon
+   appears; `config.json` is created next to it on first save.
+2. Click the tray icon and pick a **Voice**, set **Volume/Speed**, and toggle
+   **Reading notifications** on/off.
+3. Use **Apps** to mute specific applications and **Filters** to block/allow by
+   text.
+
+> **Tip:** Windows only records a toast in the database when notifications for
+> that app are enabled in *Settings → System → Notifications*. If nothing is
+> being read, check that the sending app is allowed to show notifications.
+
+### Autostart (optional)
+
+Because the app is portable it doesn’t register itself. To start it with
+Windows, drop a shortcut to the `.exe` into your Startup folder
+(`Win`+`R` → `shell:startup`).
+
+---
+
+## `config.json`
+
+Created next to the executable. Example:
+
+```json
+{
+  "enabled": true,
+  "selected_voice_id": "online:en-ZA-LeahNeural",
+  "rate": 0,
+  "volume": 130,
+  "show_all_languages": false,
+  "muted_apps": ["Microsoft Teams"],
+  "known_apps": ["WhatsApp", "Microsoft Teams", "Mail"],
+  "filters": [
+    { "pattern": "verification code", "is_regex": false, "block": true },
+    { "pattern": "^Reminder:", "is_regex": true, "block": true }
+  ],
+  "poll_interval_ms": 1000
+}
+```
+
+Field notes:
+
+| Field | Meaning |
+|-------|---------|
+| `selected_voice_id` | `online:{ShortName}` for a neural voice, or `sapi:{name}` for an offline voice. |
+| `rate` | Speaking speed, `-10`..`10` (0 = normal). |
+| `volume` | `0`..`200`. `100` = normal; above `100` amplifies (louder than system). |
+| `show_all_languages` | `false` = only voices matching the Windows display language. |
+| `poll_interval_ms` | How often the notification DB is polled (minimum 250 ms; 1000 ms recommended). |
+| `filters[].block` | `true` blocks matching notifications; `false` switches to allow-list mode. |
+
+Filter rules are matched against the app name **and** the notification text.
+
+---
+
+## How it works
+
+```
+                +-----------------------------+
+   Windows      |  wpndatabase.db (SQLite)    |
+   toast   -->  |  Notification + Handler      |
+                +--------------+--------------+
+                               | poll every ~1s (read-only)
+                               v
+   +---------------------------+---------------------------+
+   |  worker thread                                        |
+   |  parse toast XML -> text parts                        |
+   |  build spoken text (skip app name / group name)       |
+   |  apply per-app mute + filter rules                    |
+   +---------------------------+---------------------------+
+                               v
+   +---------------------------+---------------------------+
+   |  speech engine                                        |
+   |  online: Edge neural TTS (MP3) -> rodio (gain boost)  |
+   |  offline fallback: Windows SAPI voice                 |
+   +-------------------------------------------------------+
+
+   tray UI (native-windows-gui) <-> config.json (portable)
+```
+
+The app reads the database **read-only** and only reacts to notifications that
+arrive after it starts, so it never re-reads your notification backlog.
+
+---
+
+## Project layout
+
+| Path | Purpose |
+|------|---------|
+| `src/config.rs` | Portable `config.json` load/save. |
+| `src/notifications.rs` | Reads/polls the Windows notification SQLite DB. |
+| `src/filter.rs` | Spoken-text shaping + block/allow rules. |
+| `src/voices.rs` | Full online voice catalogue + language filtering. |
+| `src/drm.rs` / `src/edge_tts.rs` | Edge neural TTS auth + WebSocket synthesis. |
+| `src/speech.rs` | Audio playback (online) + SAPI offline fallback. |
+| `src/locale.rs` | Detects the Windows display language. |
+| `src/worker.rs` | Background polling/speaking thread. |
+| `src/app.rs` | System-tray UI and menu. |
+| `.github/workflows/build.yml` | Windows CI build + release. |
+
+---
+
+## License
+
+See [LICENSE](LICENSE).
