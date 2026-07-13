@@ -1,0 +1,8 @@
+#include <winuser.h>
+
+/* Embed the application manifest so Windows loads Common Controls v6
+   (needed for GetWindowSubclass / native-windows-gui). */
+1 RT_MANIFEST "PortableNotificationReader.manifest"
+
+/* Application icon shown in Explorer, the title bar and the tray. */
+2 ICON "assets/app.ico"
