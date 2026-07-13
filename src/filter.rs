@@ -1,7 +1,7 @@
 //! Turns a raw notification into the exact words to speak, and decides whether it
 //! should be spoken at all (per-app mute + user filter rules).
 
-use crate::config::{FilterRule, ReplaceRule, TextFilter};
+use crate::config::{FilterRule, ReplaceRule};
 use once_cell::sync::Lazy;
 use regex::{escape, Regex};
 
@@ -99,30 +99,9 @@ pub fn build_spoken_text(parts: &[String]) -> String {
     clean_urls(&raw)
 }
 
-/// Remove every match of the user's "Filter text" rules from `text`.
-/// A plain (non-regex) pattern is matched case-insensitively; an invalid regex
-/// is skipped so a bad rule can never crash speaking.
-pub fn apply_text_filters(text: &str, rules: &[TextFilter]) -> String {
-    let mut out = text.to_string();
-    for r in rules {
-        if r.pattern.trim().is_empty() {
-            continue;
-        }
-        let re = if r.is_regex {
-            Regex::new(&r.pattern)
-        } else {
-            // Case-insensitive literal match.
-            Regex::new(&format!("(?i){}", escape(&r.pattern)))
-        };
-        if let Ok(re) = re {
-            out = re.replace_all(&out, "").to_string();
-        }
-    }
-    out
-}
-
-/// Apply the user's "Replace text" rules to `text`, in order.
-/// Plain patterns match case-insensitively; an empty replacement deletes the match.
+/// Apply the user's text filtering & replacement rules to `text`, in order.
+/// Plain patterns match case-insensitively; an empty replacement deletes the
+/// match (so a rule with a blank replacement acts as a plain filter).
 pub fn apply_replacements(text: &str, rules: &[ReplaceRule]) -> String {
     let mut out = text.to_string();
     for r in rules {
@@ -260,15 +239,16 @@ mod tests {
     }
 
     #[test]
-    fn text_filter_removes_substring_case_insensitive() {
-        let rules = vec![TextFilter { pattern: "URGENT:".into(), is_regex: false }];
-        assert_eq!(apply_text_filters("urgent: call me", &rules), " call me");
+    fn replacement_empty_deletes_case_insensitive() {
+        // A rule with a blank replacement acts as a plain "filter".
+        let rules = vec![ReplaceRule { pattern: "URGENT:".into(), replacement: "".into(), is_regex: false }];
+        assert_eq!(apply_replacements("urgent: call me", &rules), " call me");
     }
 
     #[test]
-    fn text_filter_regex() {
-        let rules = vec![TextFilter { pattern: r"\[.*?\]".into(), is_regex: true }];
-        assert_eq!(apply_text_filters("[work] hello [tag]", &rules), " hello ");
+    fn replacement_regex_delete() {
+        let rules = vec![ReplaceRule { pattern: r"\[.*?\]".into(), replacement: "".into(), is_regex: true }];
+        assert_eq!(apply_replacements("[work] hello [tag]", &rules), " hello ");
     }
 
     #[test]
@@ -292,8 +272,8 @@ mod tests {
 
     #[test]
     fn invalid_regex_is_skipped() {
-        let rules = vec![TextFilter { pattern: "(".into(), is_regex: true }];
+        let rules = vec![ReplaceRule { pattern: "(".into(), replacement: "".into(), is_regex: true }];
         // bad regex must not panic and must leave text untouched
-        assert_eq!(apply_text_filters("hello (", &rules), "hello (");
+        assert_eq!(apply_replacements("hello (", &rules), "hello (");
     }
 }

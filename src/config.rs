@@ -26,19 +26,9 @@ fn default_true() -> bool {
     true
 }
 
-/// A rule that removes matching text from a message before it is spoken.
-/// (Menu: Filters → Filter text.)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TextFilter {
-    /// Text or regex to strip out of the spoken message.
-    pub pattern: String,
-    /// If true `pattern` is a regular expression, otherwise a plain substring.
-    #[serde(default)]
-    pub is_regex: bool,
-}
-
-/// A rule that replaces matching text with something else before speaking.
-/// (Menu: Filters → Replace text.) An empty `replacement` deletes the match.
+/// A rule that rewrites part of a message before it is spoken.
+/// (Menu: Filters → Text filtering & replacement rules.)
+/// An empty `replacement` simply removes the match (i.e. acts as a filter).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplaceRule {
     /// Text or regex to find.
@@ -81,10 +71,8 @@ pub struct Config {
     pub known_apps: Vec<String>,
     /// User filter rules.
     pub filters: Vec<FilterRule>,
-    /// Text/phrases removed from a message before it is spoken.
-    #[serde(default)]
-    pub text_filters: Vec<TextFilter>,
-    /// Find/replace rules applied to a message before it is spoken.
+    /// Text filtering & replacement rules applied to a message before it is
+    /// spoken. An empty `replacement` removes the match.
     #[serde(default)]
     pub replacements: Vec<ReplaceRule>,
     /// When true, emojis are spoken by their meaning (e.g. "smiling face").
@@ -106,7 +94,6 @@ impl Default for Config {
             muted_apps: Vec::new(),
             known_apps: Vec::new(),
             filters: Vec::new(),
-            text_filters: Vec::new(),
             replacements: Vec::new(),
             speak_emojis: false,
             poll_interval_ms: default_poll(),

@@ -8,7 +8,7 @@
 //!   with an explicit blacklist / whitelist choice.
 //! * Both a left-click and a right-click on the tray icon open the menu.
 
-use crate::config::{Config, FilterRule, ReplaceRule, TextFilter};
+use crate::config::{Config, FilterRule, ReplaceRule};
 use crate::worker::{PreviewSlot, SayQueue, SharedCatalog, SharedConfig};
 use crate::{locale, voices};
 use std::cell::RefCell;
@@ -44,7 +44,6 @@ enum Action {
     ToggleMuteApp(String),
     TestVoice,
     ManageFilters,
-    ManageTextFilters,
     ManageReplacements,
     OpenFolder,
     About,
@@ -80,20 +79,9 @@ pub struct App {
     fremove: nwg::Button,
     fclose: nwg::Button,
 
-    // ---- "Filter text" window (remove phrases before speaking) ----
-    twindow: nwg::Window,
-    #[allow(dead_code)]
-    thint: nwg::Label,
-    tlist: nwg::ListBox<String>,
-    #[allow(dead_code)]
-    tpattern_label: nwg::Label,
-    tpattern: nwg::TextInput,
-    tregex: nwg::CheckBox,
-    tadd: nwg::Button,
-    tremove: nwg::Button,
-    tclose: nwg::Button,
-
-    // ---- "Replace text" window (find → replace before speaking) ----
+    // ---- "Text filtering & replacement rules" window ----
+    // A single rule with a blank replacement acts as a plain filter (removes
+    // the match); with a replacement it substitutes text before speaking.
     rwindow: nwg::Window,
     #[allow(dead_code)]
     rhint: nwg::Label,
@@ -263,150 +251,77 @@ impl App {
             .size((90, 30))
             .build(&mut fclose)?;
 
-        // ---- "Filter text" window ----
-        let mut twindow = nwg::Window::default();
-        nwg::Window::builder()
-            .title("Filter text")
-            .flags(nwg::WindowFlags::WINDOW)
-            .size((490, 400))
-            .center(true)
-            .build(&mut twindow)?;
-
-        let mut thint = nwg::Label::default();
-        nwg::Label::builder()
-            .text(
-                "Remove words or phrases from a message before it is spoken.\n\
-                 The rest of the message is still read \u{2013} only the matched text is dropped.",
-            )
-            .parent(&twindow)
-            .position((12, 10))
-            .size((466, 44))
-            .build(&mut thint)?;
-
-        let mut tlist = nwg::ListBox::default();
-        nwg::ListBox::builder()
-            .parent(&twindow)
-            .position((12, 62))
-            .size((466, 190))
-            .build(&mut tlist)?;
-
-        let mut tpattern_label = nwg::Label::default();
-        nwg::Label::builder()
-            .text("Text / pattern:")
-            .parent(&twindow)
-            .position((12, 266))
-            .size((100, 22))
-            .build(&mut tpattern_label)?;
-
-        let mut tpattern = nwg::TextInput::default();
-        nwg::TextInput::builder()
-            .parent(&twindow)
-            .position((114, 264))
-            .size((364, 24))
-            .build(&mut tpattern)?;
-
-        let mut tregex = nwg::CheckBox::default();
-        nwg::CheckBox::builder()
-            .text("Treat as a regular expression")
-            .parent(&twindow)
-            .position((12, 296))
-            .size((300, 22))
-            .build(&mut tregex)?;
-
-        let mut tadd = nwg::Button::default();
-        nwg::Button::builder()
-            .text("Add rule")
-            .parent(&twindow)
-            .position((12, 328))
-            .size((110, 30))
-            .build(&mut tadd)?;
-
-        let mut tremove = nwg::Button::default();
-        nwg::Button::builder()
-            .text("Remove selected")
-            .parent(&twindow)
-            .position((132, 328))
-            .size((150, 30))
-            .build(&mut tremove)?;
-
-        let mut tclose = nwg::Button::default();
-        nwg::Button::builder()
-            .text("Close")
-            .parent(&twindow)
-            .position((388, 328))
-            .size((90, 30))
-            .build(&mut tclose)?;
-
-        // ---- "Replace text" window ----
+        // ---- "Text filtering & replacement rules" window ----
         let mut rwindow = nwg::Window::default();
         nwg::Window::builder()
-            .title("Replace text")
+            .title("Text filtering and replacement rules")
             .flags(nwg::WindowFlags::WINDOW)
-            .size((490, 430))
+            .size((520, 430))
             .center(true)
             .build(&mut rwindow)?;
 
         let mut rhint = nwg::Label::default();
         nwg::Label::builder()
             .text(
-                "Replace a word or phrase with different text before speaking.\n\
-                 Leave \u{201C}Replace with\u{201D} empty to simply delete the matched text.",
+                "Define rules to process messages before they are spoken. You can either \
+                 replace specific text or remove (filter) it entirely by leaving the \
+                 replacement empty.",
             )
             .parent(&rwindow)
             .position((12, 10))
-            .size((466, 44))
+            .size((496, 48))
             .build(&mut rhint)?;
 
         let mut rlist = nwg::ListBox::default();
         nwg::ListBox::builder()
             .parent(&rwindow)
-            .position((12, 62))
-            .size((466, 170))
+            .position((12, 66))
+            .size((496, 170))
             .build(&mut rlist)?;
 
         let mut rfind_label = nwg::Label::default();
         nwg::Label::builder()
-            .text("Find:")
+            .text("Text / pattern:")
             .parent(&rwindow)
-            .position((12, 246))
-            .size((100, 22))
+            .position((12, 250))
+            .size((110, 22))
             .build(&mut rfind_label)?;
 
         let mut rfind = nwg::TextInput::default();
         nwg::TextInput::builder()
             .parent(&rwindow)
-            .position((114, 244))
-            .size((364, 24))
+            .position((124, 248))
+            .size((384, 24))
             .build(&mut rfind)?;
 
         let mut rwith_label = nwg::Label::default();
         nwg::Label::builder()
             .text("Replace with:")
             .parent(&rwindow)
-            .position((12, 278))
-            .size((100, 22))
+            .position((12, 282))
+            .size((110, 22))
             .build(&mut rwith_label)?;
 
         let mut rwith = nwg::TextInput::default();
         nwg::TextInput::builder()
             .parent(&rwindow)
-            .position((114, 276))
-            .size((364, 24))
+            .position((124, 280))
+            .size((384, 24))
             .build(&mut rwith)?;
 
         let mut rregex = nwg::CheckBox::default();
         nwg::CheckBox::builder()
-            .text("Treat \u{201C}Find\u{201D} as a regular expression")
+            .text("Treat \u{2018}Text / pattern\u{2019} as a regular expression")
             .parent(&rwindow)
-            .position((12, 308))
-            .size((360, 22))
+            .position((12, 312))
+            .size((400, 22))
             .build(&mut rregex)?;
 
         let mut radd = nwg::Button::default();
         nwg::Button::builder()
             .text("Add rule")
             .parent(&rwindow)
-            .position((12, 340))
+            .position((12, 344))
             .size((110, 30))
             .build(&mut radd)?;
 
@@ -414,7 +329,7 @@ impl App {
         nwg::Button::builder()
             .text("Remove selected")
             .parent(&rwindow)
-            .position((132, 340))
+            .position((132, 344))
             .size((150, 30))
             .build(&mut rremove)?;
 
@@ -422,7 +337,7 @@ impl App {
         nwg::Button::builder()
             .text("Close")
             .parent(&rwindow)
-            .position((388, 340))
+            .position((418, 344))
             .size((90, 30))
             .build(&mut rclose)?;
 
@@ -446,15 +361,6 @@ impl App {
             fadd,
             fremove,
             fclose,
-            twindow,
-            thint,
-            tlist,
-            tpattern_label,
-            tpattern,
-            tregex,
-            tadd,
-            tremove,
-            tclose,
             rwindow,
             rhint,
             rlist,
@@ -473,7 +379,7 @@ impl App {
             last_preview: RefCell::new(String::new()),
         });
 
-        // One handler per top-level window (tray/message + the three editors).
+        // One handler per top-level window (tray/message + the two editors).
         let a1 = app.clone();
         let h1 = nwg::full_bind_event_handler(&app.window.handle, move |evt, data, handle| {
             a1.dispatch(evt, &data, handle);
@@ -483,12 +389,8 @@ impl App {
             a2.dispatch(evt, &data, handle);
         });
         let a3 = app.clone();
-        let h3 = nwg::full_bind_event_handler(&app.twindow.handle, move |evt, data, handle| {
+        let h3 = nwg::full_bind_event_handler(&app.rwindow.handle, move |evt, data, handle| {
             a3.dispatch(evt, &data, handle);
-        });
-        let a4 = app.clone();
-        let h4 = nwg::full_bind_event_handler(&app.rwindow.handle, move |evt, data, handle| {
-            a4.dispatch(evt, &data, handle);
         });
 
         // Announce that the app is running with a tray balloon that fades on its
@@ -501,7 +403,7 @@ impl App {
             Some(&app.icon),
         );
 
-        Ok((app, vec![h1, h2, h3, h4]))
+        Ok((app, vec![h1, h2, h3]))
     }
 
     fn dispatch(&self, evt: nwg::Event, data: &nwg::EventData, handle: nwg::ControlHandle) {
@@ -518,17 +420,12 @@ impl App {
             E::OnButtonClick => self.on_button(handle),
             E::OnWindowClose => {
                 // Hide instead of destroying, so any editor window can reopen.
-                if handle == self.fwindow.handle
-                    || handle == self.twindow.handle
-                    || handle == self.rwindow.handle
-                {
+                if handle == self.fwindow.handle || handle == self.rwindow.handle {
                     if let nwg::EventData::OnWindowClose(close) = data {
                         close.close(false);
                     }
                     if handle == self.fwindow.handle {
                         self.fwindow.set_visible(false);
-                    } else if handle == self.twindow.handle {
-                        self.twindow.set_visible(false);
                     } else {
                         self.rwindow.set_visible(false);
                     }
@@ -587,14 +484,7 @@ impl App {
         } else if handle == self.fallow.handle {
             self.fblock.set_check_state(nwg::RadioButtonState::Unchecked);
             self.fallow.set_check_state(nwg::RadioButtonState::Checked);
-        // ---- Filter text window ----
-        } else if handle == self.tadd.handle {
-            self.add_text_filter();
-        } else if handle == self.tremove.handle {
-            self.remove_text_filter();
-        } else if handle == self.tclose.handle {
-            self.twindow.set_visible(false);
-        // ---- Replace text window ----
+        // ---- Text filtering & replacement rules window ----
         } else if handle == self.radd.handle {
             self.add_replacement();
         } else if handle == self.rremove.handle {
@@ -637,7 +527,6 @@ impl App {
                 }
             }
             Action::ManageFilters => self.show_filters(),
-            Action::ManageTextFilters => self.show_text_filters(),
             Action::ManageReplacements => self.show_replacements(),
             Action::OpenFolder => {
                 let _ = std::process::Command::new("explorer.exe")
@@ -743,69 +632,7 @@ impl App {
         }
     }
 
-    // ---- Filter text window ----------------------------------------------
-
-    fn show_text_filters(&self) {
-        self.refresh_text_filters();
-        self.twindow.set_visible(true);
-        self.tpattern.set_focus();
-    }
-
-    fn refresh_text_filters(&self) {
-        let rules = self
-            .cfg
-            .lock()
-            .map(|c| c.text_filters.clone())
-            .unwrap_or_default();
-        let rows: Vec<String> = rules
-            .iter()
-            .map(|r| {
-                let re = if r.is_regex { "  [regex]" } else { "" };
-                format!("\u{2702} remove: {}{re}", r.pattern)
-            })
-            .collect();
-        self.tlist.set_collection(rows);
-    }
-
-    fn add_text_filter(&self) {
-        let pattern = self.tpattern.text().trim().to_string();
-        if pattern.is_empty() {
-            nwg::modal_info_message(
-                &self.twindow.handle,
-                "Filter text",
-                "Please type some text (or a regular expression) to remove.",
-            );
-            return;
-        }
-        let is_regex = self.tregex.check_state() == nwg::CheckBoxState::Checked;
-        self.with_cfg(|c| {
-            c.text_filters.push(TextFilter {
-                pattern: pattern.clone(),
-                is_regex,
-            });
-        });
-        self.tpattern.set_text("");
-        self.refresh_text_filters();
-    }
-
-    fn remove_text_filter(&self) {
-        if let Some(idx) = self.tlist.selection() {
-            self.with_cfg(|c| {
-                if idx < c.text_filters.len() {
-                    c.text_filters.remove(idx);
-                }
-            });
-            self.refresh_text_filters();
-        } else {
-            nwg::modal_info_message(
-                &self.twindow.handle,
-                "Filter text",
-                "Select a rule in the list first, then click Remove selected.",
-            );
-        }
-    }
-
-    // ---- Replace text window ---------------------------------------------
+    // ---- Text filtering & replacement rules window -----------------------
 
     fn show_replacements(&self) {
         self.refresh_replacements();
@@ -822,13 +649,16 @@ impl App {
         let rows: Vec<String> = rules
             .iter()
             .map(|r| {
-                let re = if r.is_regex { "  [regex]" } else { "" };
-                let to = if r.replacement.is_empty() {
-                    "(removed)".to_string()
+                let re = if r.is_regex { " (RegEx)" } else { "" };
+                if r.replacement.is_empty() {
+                    // Blank replacement = a plain filter (removes the match).
+                    format!("Filter{re}: \u{201C}{}\u{201D}", r.pattern)
                 } else {
-                    format!("\u{201C}{}\u{201D}", r.replacement)
-                };
-                format!("\u{201C}{}\u{201D} \u{2192} {to}{re}", r.pattern)
+                    format!(
+                        "Replace{re}: \u{201C}{}\u{201D} with \u{201C}{}\u{201D}",
+                        r.pattern, r.replacement
+                    )
+                }
             })
             .collect();
         self.rlist.set_collection(rows);
@@ -839,8 +669,8 @@ impl App {
         if pattern.is_empty() {
             nwg::modal_info_message(
                 &self.rwindow.handle,
-                "Replace text",
-                "Please type the text (or a regular expression) to find.",
+                "Text filtering and replacement rules",
+                "Please type the text (or a regular expression) to match.",
             );
             return;
         }
@@ -870,7 +700,7 @@ impl App {
         } else {
             nwg::modal_info_message(
                 &self.rwindow.handle,
-                "Replace text",
+                "Text filtering and replacement rules",
                 "Select a rule in the list first, then click Remove selected.",
             );
         }
@@ -884,7 +714,7 @@ impl App {
         let mut seps: Vec<nwg::MenuSeparator> = Vec::new();
         let mut actions: Vec<(nwg::ControlHandle, Action)> = Vec::new();
 
-        let (enabled, speak_emojis, volume, rate, show_all, selected, known_apps, muted_apps, filters, n_textfilters, n_replacements) = {
+        let (enabled, speak_emojis, volume, rate, show_all, selected, known_apps, muted_apps, filters, n_replacements) = {
             let c = self.cfg.lock().unwrap();
             (
                 c.enabled,
@@ -896,7 +726,6 @@ impl App {
                 c.known_apps.clone(),
                 c.muted_apps.clone(),
                 c.filters.clone(),
-                c.text_filters.len(),
                 c.replacements.len(),
             )
         };
@@ -919,7 +748,7 @@ impl App {
             &mut items,
             &mut actions,
             root_h,
-            if enabled { "\u{2714} Reading notifications: ON" } else { "\u{2716} Reading notifications: OFF" },
+            if enabled { "\u{2714} Reading notifications" } else { "\u{2610} Reading notifications" },
             Some(Action::ToggleEnabled),
             true,
         );
@@ -927,7 +756,7 @@ impl App {
             &mut items,
             &mut actions,
             root_h,
-            if speak_emojis { "\u{2714} Speak emojis: ON" } else { "\u{2610} Speak emojis: OFF" },
+            if speak_emojis { "\u{2714} Speak emojis" } else { "\u{2610} Speak emojis" },
             Some(Action::ToggleSpeakEmojis),
             true,
         );
@@ -1031,15 +860,7 @@ impl App {
             &mut items,
             &mut actions,
             filters_menu,
-            &format!("Filter text\u{2026} ({} rule{})", n_textfilters, plural(n_textfilters)),
-            Some(Action::ManageTextFilters),
-            true,
-        );
-        add_item(
-            &mut items,
-            &mut actions,
-            filters_menu,
-            &format!("Replace text\u{2026} ({} rule{})", n_replacements, plural(n_replacements)),
+            &format!("Text filtering & replacement\u{2026} ({} rule{})", n_replacements, plural(n_replacements)),
             Some(Action::ManageReplacements),
             true,
         );

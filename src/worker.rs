@@ -193,7 +193,7 @@ fn handle_notification(
     }
 
     // Snapshot the settings we need.
-    let (enabled, voice_id, gain, rate, muted, filters, text_filters, replacements, speak_emojis) = {
+    let (enabled, voice_id, gain, rate, muted, filters, replacements, speak_emojis) = {
         let c = cfg.lock().unwrap();
         (
             c.enabled,
@@ -202,7 +202,6 @@ fn handle_notification(
             c.rate,
             c.is_app_muted(&n.app_display),
             c.filters.clone(),
-            c.text_filters.clone(),
             c.replacements.clone(),
             c.speak_emojis,
         )
@@ -223,10 +222,8 @@ fn handle_notification(
     }
 
     // Shape the text before speaking:
-    //   1) remove user "Filter text" phrases
-    //   2) apply user "Replace text" rules
-    //   3) expand chat shorthand + handle emojis (strip or speak meaning)
-    let spoken = filter::apply_text_filters(&spoken, &text_filters);
+    //   1) apply user text filtering & replacement rules (blank replacement = remove)
+    //   2) expand chat shorthand + handle emojis (strip or speak meaning)
     let spoken = filter::apply_replacements(&spoken, &replacements);
     let spoken = crate::text_shaping::shape(&spoken, speak_emojis);
 
