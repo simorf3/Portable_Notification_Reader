@@ -291,6 +291,28 @@ impl NotificationReader {
         Ok(())
     }
 
+    /// Query all distinct app identifiers that have ever sent a notification.
+    /// This seeds the "Apps" menu on first launch.
+    pub fn query_all_app_ids(&self) -> Result<Vec<String>> {
+        let conn = self.open()?;
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT h.PrimaryId \
+             FROM NotificationHandler h \
+             JOIN Notification n ON n.HandlerId = h.RecordId \
+             WHERE n.\"Type\" = 'toast' \
+             ORDER BY h.PrimaryId ASC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let primary_id: String = row.get(0)?;
+            Ok(app_display_name(&primary_id))
+        })?;
+        let mut apps = Vec::new();
+        for r in rows {
+            apps.push(r?);
+        }
+        Ok(apps)
+    }
+
     /// Return notifications that arrived since the last poll, advancing the cursor.
     pub fn poll_new(&mut self) -> Result<Vec<RawNotification>> {
         let conn = self.open()?;

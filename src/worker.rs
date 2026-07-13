@@ -96,6 +96,25 @@ fn run(cfg: SharedConfig, catalog: SharedCatalog, say_queue: SayQueue, preview: 
         log::warn!("baseline init failed (will retry as we poll): {e:#}");
     }
 
+    // Seed the "Apps" menu with every app that has ever sent a notification, so
+    // the list is populated on first launch (not just as new items arrive).
+    if let Ok(apps) = reader.query_all_app_ids() {
+        let mut changed = false;
+        {
+            let mut c = cfg.lock().unwrap();
+            for app in apps {
+                if c.remember_app(&app) {
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            if let Ok(c) = cfg.lock() {
+                let _ = c.save(); // non-critical; don't fail if save errors
+            }
+        }
+    }
+
     // Tick frequently so voice previews and the "Test voice" action feel
     // responsive, but only hit the database every `poll_interval_ms`.
     let tick = Duration::from_millis(120);
