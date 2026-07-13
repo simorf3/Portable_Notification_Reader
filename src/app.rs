@@ -16,11 +16,15 @@ use std::rc::Rc;
 use std::time::Duration;
 
 // Extended window styles for the transient "arrow" hint window:
-//   WS_EX_TOOLWINDOW  (0x0080) – no taskbar button
-//   WS_EX_TRANSPARENT (0x0020) – click-through (mouse passes to windows below)
-//   WS_EX_TOPMOST     (0x0008_0000)
-//   WS_EX_NOACTIVATE  (0x0800_0000) – never steals focus
-const ARROW_EX_FLAGS: u32 = 0x0080 | 0x0020 | 0x0008_0000 | 0x0800_0000;
+//   WS_EX_TOOLWINDOW  (0x0080)      – no taskbar button
+//   WS_EX_TOPMOST     (0x0008_0000) – float above other windows
+//   WS_EX_NOACTIVATE  (0x0800_0000) – never steals focus from the foreground app
+//
+// NOTE: we deliberately do *not* set WS_EX_TRANSPARENT here. On a top-level
+// window that flag stops the window from ever painting its own content (it is
+// composited after everything beneath it and nothing triggers a repaint), so
+// the hint would show up blank / invisible — which is exactly the bug we hit.
+const ARROW_EX_FLAGS: u32 = 0x0080 | 0x0008_0000 | 0x0800_0000;
 
 /// How long the startup "running in the tray" arrow hint stays on screen.
 const ARROW_HINT_SECS: u64 = 6;
