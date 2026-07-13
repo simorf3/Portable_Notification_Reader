@@ -13,6 +13,17 @@ use crate::worker::{PreviewSlot, SayQueue, SharedCatalog, SharedConfig};
 use crate::{locale, voices};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::Duration;
+
+// Extended window styles for the transient "arrow" hint window:
+//   WS_EX_TOOLWINDOW  (0x0080) – no taskbar button
+//   WS_EX_TRANSPARENT (0x0020) – click-through (mouse passes to windows below)
+//   WS_EX_TOPMOST     (0x0008_0000)
+//   WS_EX_NOACTIVATE  (0x0800_0000) – never steals focus
+const ARROW_EX_FLAGS: u32 = 0x0080 | 0x0020 | 0x0008_0000 | 0x0800_0000;
+
+/// How long the startup "running in the tray" arrow hint stays on screen.
+const ARROW_HINT_SECS: u64 = 6;
 
 /// Icon shown in the tray (compiled into the executable → nothing to ship).
 const ICON_BYTES: &[u8] = include_bytes!("../assets/app.ico");
@@ -96,6 +107,17 @@ pub struct App {
     radd: nwg::Button,
     rremove: nwg::Button,
     rclose: nwg::Button,
+
+    // ---- Startup "running in the tray" arrow hint ----
+    // A borderless, click-through, top-most window shown once at launch. It sits
+    // just above the notification area and points at it with a big arrow, then
+    // closes itself after `ARROW_HINT_SECS` via `arrow_timer`.
+    awindow: nwg::Window,
+    #[allow(dead_code)]
+    atext: nwg::Label,
+    #[allow(dead_code)]
+    aarrow: nwg::Label,
+    arrow_timer: nwg::AnimationTimer,
 
     // Dynamic menu controls are stored so their native handles stay alive while
     // the menu is on screen. They are replaced wholesale on every rebuild.
@@ -341,6 +363,67 @@ impl App {
             .size((90, 30))
             .build(&mut rclose)?;
 
+        // ---- Startup arrow hint (borderless, click-through, top-most) ----
+        // Sit just above the notification area in the bottom-right corner of the
+        // primary monitor and point at it with a big arrow.
+        let aw: i32 = 340;
+        let ah: i32 = 120;
+        let screen_w = nwg::Monitor::width();
+        let screen_h = nwg::Monitor::height();
+        // ~64px clearance for the taskbar; clamp so we never go off-screen.
+        let ax = (screen_w - aw - 24).max(0);
+        let ay = (screen_h - ah - 64).max(0);
+
+        let mut awindow = nwg::Window::default();
+        nwg::Window::builder()
+            .title("Portable Notification Reader")
+            .flags(nwg::WindowFlags::POPUP)
+            .ex_flags(ARROW_EX_FLAGS)
+            .topmost(true)
+            .size((aw, ah))
+            .position((ax, ay))
+            .build(&mut awindow)?;
+
+        let mut atext = nwg::Label::default();
+        nwg::Label::builder()
+            .text(
+                "Portable Notification Reader is running.\n\
+                 It lives down here in the notification tray \u{2013} \
+                 click the icon any time for the menu.",
+            )
+            .parent(&awindow)
+            .position((14, 12))
+            .size((312, 66))
+            .build(&mut atext)?;
+
+        // Big arrow pointing down-right toward the tray / overflow area.
+        let mut arrow_font = nwg::Font::default();
+        nwg::Font::builder()
+            .family("Segoe UI Symbol")
+            .size(46)
+            .weight(700)
+            .build(&mut arrow_font)?;
+
+        let mut aarrow = nwg::Label::default();
+        nwg::Label::builder()
+            .text("\u{2198}") // ↘ down-right arrow
+            .font(Some(&arrow_font))
+            .parent(&awindow)
+            .position((250, 60))
+            .size((76, 56))
+            .build(&mut aarrow)?;
+
+        // Fires once after ARROW_HINT_SECS to close the hint automatically.
+        // Parented to the message window so its tick is delivered by the main
+        // event handler (`h1`).
+        let mut arrow_timer = nwg::AnimationTimer::default();
+        nwg::AnimationTimer::builder()
+            .parent(&window)
+            .interval(Duration::from_secs(ARROW_HINT_SECS))
+            .max_tick(Some(1))
+            .active(false)
+            .build(&mut arrow_timer)?;
+
         let app = Rc::new(App {
             cfg,
             catalog,
@@ -372,6 +455,10 @@ impl App {
             radd,
             rremove,
             rclose,
+            awindow,
+            atext,
+            aarrow,
+            arrow_timer,
             menus: RefCell::new(Vec::new()),
             items: RefCell::new(Vec::new()),
             seps: RefCell::new(Vec::new()),
@@ -403,6 +490,11 @@ impl App {
             Some(&app.icon),
         );
 
+        // Pop the arrow hint above the tray and start the countdown that closes
+        // it after a few seconds.
+        app.awindow.set_visible(true);
+        app.arrow_timer.start();
+
         Ok((app, vec![h1, h2, h3]))
     }
 
@@ -418,6 +510,11 @@ impl App {
             E::OnMenuItemSelected => self.on_menu_select(handle),
             E::OnMenuHover => self.on_menu_hover(handle),
             E::OnButtonClick => self.on_button(handle),
+            // The one-shot timer elapsed: close the startup arrow hint.
+            E::OnTimerTick | E::OnTimerStop if handle == self.arrow_timer.handle => {
+                self.arrow_timer.stop();
+                self.awindow.set_visible(false);
+            }
             E::OnWindowClose => {
                 // Hide instead of destroying, so any editor window can reopen.
                 if handle == self.fwindow.handle || handle == self.rwindow.handle {
