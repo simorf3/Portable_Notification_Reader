@@ -748,7 +748,7 @@ impl App {
             &mut items,
             &mut actions,
             root_h,
-            if enabled { "\u{2714} Reading notifications" } else { "\u{2610} Reading notifications" },
+            if enabled { "\u{2714} Read notifications" } else { "\u{2610} Read notifications" },
             Some(Action::ToggleEnabled),
             true,
         );
@@ -833,7 +833,7 @@ impl App {
         }
 
         // ---- Apps submenu (per-app mute) ----
-        let apps_menu = add_submenu(&mut menus, root_h, "Apps");
+        let apps_menu = add_submenu(&mut menus, root_h, "Disable apps");
         if known_apps.is_empty() {
             add_item(&mut items, &mut actions, apps_menu, "No apps seen yet", None, false);
         } else {
@@ -860,7 +860,7 @@ impl App {
             &mut items,
             &mut actions,
             filters_menu,
-            &format!("Text filtering && replacement\u{2026} ({} rule{})", n_replacements, plural(n_replacements)),
+            &format!("Filter and replace text\u{2026} ({} rule{})", n_replacements, plural(n_replacements)),
             Some(Action::ManageReplacements),
             true,
         );

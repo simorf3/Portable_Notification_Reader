@@ -32,14 +32,23 @@ It is a ground-up **Rust** rewrite of the original C# app, redesigned to be
 - **Volume with loudness boost** — 0–200%. Values above 100% amplify the audio
   *louder than the system default* (online voices only).
 - **Speaking speed** control.
-- **Per-app mute** — any app that has sent a notification appears in the *Apps*
-  menu and can be muted/unmuted with a click.
+- **Per-app mute** — any app that has sent a notification appears in the
+  *Disable apps* menu and can be muted/unmuted with a click.
 - **Filter rules** — block or allow notifications by substring or regex.
+- **Text filtering and replacement** — remove or replace words/phrases before
+  speaking (plain text or regex). Leave the replacement blank to simply delete
+  the matched text.
+- **Emoji handling** — toggle **Speak emojis** to have emoji meanings spoken
+  (e.g. 🎉 → "party popper"), or leave it off to strip them silently. Full
+  Unicode CLDR coverage including multi-part sequences (skin tones, ZWJ families).
+- **Shorthand expansion** — common chat abbreviations (lol, brb, omg, etc.) are
+  automatically expanded to full words before speaking.
 - **Smart speech shaping** (matches the original app):
   - the **app name is never read aloud**;
   - for a **WhatsApp group**, the group name is skipped and only the
     “Sender: message” body is read;
-  - for a one-on-one chat the contact/title is kept.
+  - for a one-on-one chat the contact/title is kept;
+  - **URLs are replaced** with friendly "domain link" text (e.g. "instagram link").
 - Left-click **or** right-click the tray icon to open the menu.
 
 ---
@@ -121,9 +130,9 @@ match, the file is exactly what the CI built.
 1. Put `PortableNotificationReader.exe` in any folder and run it. A tray icon
    appears; `config.json` is created next to it on first save.
 2. Click the tray icon and pick a **Voice**, set **Volume/Speed**, and toggle
-   **Reading notifications** on/off.
-3. Use **Apps** to mute specific applications and **Filters** to block/allow by
-   text.
+   **Read notifications** and **Speak emojis** on/off.
+3. Use **Disable apps** to mute specific applications and **Filters** to
+   block/allow notifications or filter/replace text before speaking.
 
 > **Tip:** Windows only records a toast in the database when notifications for
 > that app are enabled in *Settings → System → Notifications*. If nothing is
@@ -148,11 +157,16 @@ Created next to the executable. Example:
   "rate": 0,
   "volume": 130,
   "show_all_languages": false,
+  "speak_emojis": false,
   "muted_apps": ["Microsoft Teams"],
   "known_apps": ["WhatsApp", "Microsoft Teams", "Mail"],
   "filters": [
     { "pattern": "verification code", "is_regex": false, "block": true },
     { "pattern": "^Reminder:", "is_regex": true, "block": true }
+  ],
+  "replacements": [
+    { "pattern": "AI", "replacement": "Artificial Intelligence", "is_regex": false },
+    { "pattern": "\\[ERROR\\]", "replacement": "", "is_regex": true }
   ],
   "poll_interval_ms": 1000
 }
@@ -166,10 +180,16 @@ Field notes:
 | `rate` | Speaking speed, `-10`..`10` (0 = normal). |
 | `volume` | `0`..`200`. `100` = normal; above `100` amplifies (louder than system). |
 | `show_all_languages` | `false` = only voices matching the Windows display language. |
+| `speak_emojis` | `false` (default) strips emojis; `true` speaks their meanings (e.g. 🎉 → "party popper"). |
 | `poll_interval_ms` | How often the notification DB is polled (minimum 250 ms; 1000 ms recommended). |
 | `filters[].block` | `true` blocks matching notifications; `false` switches to allow-list mode. |
+| `replacements[]` | Text filtering & replacement rules. Empty `replacement` removes the match. |
 
 Filter rules are matched against the app name **and** the notification text.
+
+Replacements are applied **after** filters, in order, before speaking. Chat
+shorthand (lol, brb, etc.) is automatically expanded and then emojis are handled
+per the `speak_emojis` toggle.
 
 ---
 
@@ -209,7 +229,8 @@ arrive after it starts, so it never re-reads your notification backlog.
 |------|---------|
 | `src/config.rs` | Portable `config.json` load/save. |
 | `src/notifications.rs` | Reads/polls the Windows notification SQLite DB. |
-| `src/filter.rs` | Spoken-text shaping + block/allow rules. |
+| `src/filter.rs` | Block/allow rules + text filtering/replacement + URL cleaning. |
+| `src/text_shaping.rs` | Shorthand expansion + emoji handling (speak or strip). |
 | `src/voices.rs` | Full online voice catalogue + language filtering. |
 | `src/drm.rs` / `src/edge_tts.rs` | Edge neural TTS auth + WebSocket synthesis. |
 | `src/speech.rs` | Audio playback (online) + SAPI offline fallback. |
