@@ -35,6 +35,13 @@ pub type SharedCatalog = Arc<Mutex<VoiceCatalog>>;
 /// Ad-hoc phrases the UI wants spoken now (e.g. the "Test voice" action).
 pub type SayQueue = Arc<Mutex<Vec<String>>>;
 
+/// Latest voice id the UI wants to preview (from hovering the voice menu).
+/// "Latest wins": a new hover replaces any pending preview.
+pub type PreviewSlot = Arc<Mutex<Option<String>>>;
+
+/// Short phrase used when previewing a voice on hover.
+const PREVIEW_TEXT: &str = "Hello, this is a preview of this voice.";
+
 /// Fetch the full online voice list on a background thread (network, ~1s).
 pub fn spawn_voice_fetch(catalog: SharedCatalog) {
     std::thread::spawn(move || {
@@ -55,13 +62,14 @@ pub fn spawn(
     cfg: SharedConfig,
     catalog: SharedCatalog,
     say_queue: SayQueue,
+    preview: PreviewSlot,
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
-        run(cfg, catalog, say_queue);
+        run(cfg, catalog, say_queue, preview);
     })
 }
 
-fn run(cfg: SharedConfig, catalog: SharedCatalog, say_queue: SayQueue) {
+fn run(cfg: SharedConfig, catalog: SharedCatalog, say_queue: SayQueue, preview: PreviewSlot) {
     // Audio + SAPI must be created on this thread (rodio/tts are not Send).
     let (gain, rate) = {
         let c = cfg.lock().unwrap();
@@ -88,13 +96,27 @@ fn run(cfg: SharedConfig, catalog: SharedCatalog, say_queue: SayQueue) {
         log::warn!("baseline init failed (will retry as we poll): {e:#}");
     }
 
-    loop {
-        let interval = {
-            let c = cfg.lock().unwrap();
-            c.poll_interval_ms
-        };
+    // Tick frequently so voice previews and the "Test voice" action feel
+    // responsive, but only hit the database every `poll_interval_ms`.
+    let tick = Duration::from_millis(120);
+    let mut last_poll = std::time::Instant::now()
+        .checked_sub(Duration::from_secs(3600))
+        .unwrap_or_else(std::time::Instant::now);
 
-        // Serve any ad-hoc "say this now" requests from the UI (voice test).
+    loop {
+        // 1) Voice preview (hovering a voice in the menu). Latest wins.
+        let preview_id = preview.lock().ok().and_then(|mut s| s.take());
+        if let Some(voice_id) = preview_id {
+            let (gain, rate) = {
+                let c = cfg.lock().unwrap();
+                (c.gain(), c.rate)
+            };
+            engine.set_gain(gain);
+            engine.set_rate(rate);
+            engine.speak(&voice_id, PREVIEW_TEXT);
+        }
+
+        // 2) Ad-hoc "say this now" requests from the UI (Test voice).
         let pending: Vec<String> = {
             let mut q = say_queue.lock().unwrap();
             std::mem::take(&mut *q)
@@ -109,20 +131,27 @@ fn run(cfg: SharedConfig, catalog: SharedCatalog, say_queue: SayQueue) {
             engine.speak(&voice_id, &phrase);
         }
 
-        // Always poll so the cursor keeps advancing; only speak when enabled.
-        match reader.poll_new() {
-            Ok(items) => {
-                for n in items {
-                    handle_notification(&cfg, &mut engine, &n);
+        // 3) Poll the notification DB on the configured interval.
+        let interval = {
+            let c = cfg.lock().unwrap();
+            c.poll_interval_ms
+        };
+        if last_poll.elapsed() >= Duration::from_millis(interval) {
+            last_poll = std::time::Instant::now();
+            match reader.poll_new() {
+                Ok(items) => {
+                    for n in items {
+                        handle_notification(&cfg, &mut engine, &n);
+                    }
                 }
-            }
-            Err(e) => {
-                // DB may be transiently locked by Windows; try again next tick.
-                log::debug!("poll error: {e:#}");
+                Err(e) => {
+                    // DB may be transiently locked by Windows; retry next poll.
+                    log::debug!("poll error: {e:#}");
+                }
             }
         }
 
-        std::thread::sleep(Duration::from_millis(interval));
+        std::thread::sleep(tick);
     }
 }
 

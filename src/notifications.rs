@@ -78,9 +78,63 @@ pub fn parse_text_parts(xml: &str) -> Vec<String> {
     parts
 }
 
+/// Best-effort friendly app name for a notification handler id.
+///
+/// Order of preference:
+///  1. The `DisplayName` Windows itself stores for the app under the per-user
+///     notification settings registry key (exactly what you see in
+///     *Settings → Notifications*). This resolves PWAs and packaged apps to a
+///     real name instead of a raw AUMID.
+///  2. A heuristic clean-up of the AUMID / exe path (see [`pretty_app_name`]).
+pub fn app_display_name(primary_id: &str) -> String {
+    if let Some(name) = registry_display_name(primary_id) {
+        let n = name.trim();
+        if !n.is_empty() {
+            return n.to_string();
+        }
+    }
+    pretty_app_name(primary_id)
+}
+
+/// Look up the friendly `DisplayName` Windows records for this handler id.
+#[cfg(windows)]
+fn registry_display_name(primary_id: &str) -> Option<String> {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let path = format!(
+        r"Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\{primary_id}"
+    );
+    let key = hkcu.open_subkey(path).ok()?;
+    // Windows stores the shown name in "DisplayName"; some builds indirect it.
+    let name: String = key.get_value("DisplayName").ok()?;
+    let name = name.trim();
+    if name.is_empty() || name.starts_with("@{") || name.starts_with('@') {
+        // "@{Package?ms-resource...}" indirect strings can't be resolved cheaply.
+        None
+    } else {
+        Some(name.to_string())
+    }
+}
+
+#[cfg(not(windows))]
+fn registry_display_name(_primary_id: &str) -> Option<String> {
+    None
+}
+
 /// Turn an AUMID / handler id into something human-readable for the app list.
 pub fn pretty_app_name(primary_id: &str) -> String {
-    let mut s = primary_id;
+    // A few well-known ids map to names Windows won't spell nicely on its own.
+    if let Some(known) = known_app_name(primary_id) {
+        return known.to_string();
+    }
+
+    // Drop any query-string tail (e.g. Edge PWA ids like "...?clientType=pwa").
+    let mut s = primary_id.split('?').next().unwrap_or(primary_id).trim();
+    if s.is_empty() {
+        return "Web app".to_string();
+    }
 
     // A Win32 exe path / ProgID with a path -> file stem (do this first so the
     // ".exe" extension doesn't get mistaken for an AUMID dotted segment). We split
@@ -110,6 +164,32 @@ pub fn pretty_app_name(primary_id: &str) -> String {
     } else {
         out
     }
+}
+
+/// Friendly names for common ids whose AUMID doesn't clean up nicely.
+fn known_app_name(primary_id: &str) -> Option<&'static str> {
+    let p = primary_id.to_lowercase();
+    const MAP: &[(&str, &str)] = &[
+        ("whatsapp", "WhatsApp"),
+        ("screensketch", "Snipping Tool"),
+        ("microsoft.windows.snip", "Snipping Tool"),
+        ("teams", "Microsoft Teams"),
+        ("outlook", "Outlook"),
+        ("olk.exe", "Outlook"),
+        ("windowslive.mail", "Mail"),
+        ("microsoft.outlookforwindows", "Outlook (new)"),
+        ("microsoft.skypeapp", "Skype"),
+        ("telegram", "Telegram"),
+        ("discord", "Discord"),
+        ("slack", "Slack"),
+        ("spotify", "Spotify"),
+        ("microsoft.windowsstore", "Microsoft Store"),
+        ("windowssecurity", "Windows Security"),
+        ("microsoft.xboxapp", "Xbox"),
+    ];
+    MAP.iter()
+        .find(|(needle, _)| p.contains(needle))
+        .map(|(_, name)| *name)
 }
 
 /// Split simple CamelCase into space-separated words ("WhatsAppDesktop" -> "Whats App Desktop").
@@ -182,7 +262,7 @@ impl NotificationReader {
             if text_parts.is_empty() {
                 // Nothing speakable (e.g. image-only toast) – still advance the cursor.
                 out.push(RawNotification {
-                    app_display: pretty_app_name(&primary_id),
+                    app_display: app_display_name(&primary_id),
                     app_primary_id: primary_id,
                     arrival_time: arrival,
                     text_parts,
@@ -190,7 +270,7 @@ impl NotificationReader {
                 continue;
             }
             out.push(RawNotification {
-                app_display: pretty_app_name(&primary_id),
+                app_display: app_display_name(&primary_id),
                 app_primary_id: primary_id,
                 arrival_time: arrival,
                 text_parts,
@@ -244,13 +324,33 @@ mod tests {
 
     #[test]
     fn pretty_names() {
+        // Well-known ids resolve through the friendly-name map.
         assert_eq!(
             pretty_app_name("5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"),
-            "Whats App Desktop"
+            "WhatsApp"
         );
         assert_eq!(
             pretty_app_name(r"C:\Program Files\Slack\slack.exe"),
-            "slack"
+            "Slack"
+        );
+    }
+
+    #[test]
+    fn pretty_names_heuristics() {
+        // Unknown packaged AUMID -> CamelCase split of the last segment.
+        assert_eq!(
+            pretty_app_name("1234ABCD.SomeCoolApp_abcdef123456!App"),
+            "Some Cool App"
+        );
+        // Unknown Win32 exe -> file stem.
+        assert_eq!(
+            pretty_app_name(r"C:\Tools\MyTool\mytool.exe"),
+            "mytool"
+        );
+        // Edge PWA style id with a query tail is stripped.
+        assert_eq!(
+            pretty_app_name("MSEdge.abc123?clientType=pwa"),
+            "abc123"
         );
     }
 }
