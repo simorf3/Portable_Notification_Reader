@@ -860,7 +860,7 @@ impl App {
             &mut items,
             &mut actions,
             filters_menu,
-            &format!("Text filtering & replacement\u{2026} ({} rule{})", n_replacements, plural(n_replacements)),
+            &format!("Text filtering && replacement\u{2026} ({} rule{})", n_replacements, plural(n_replacements)),
             Some(Action::ManageReplacements),
             true,
         );
