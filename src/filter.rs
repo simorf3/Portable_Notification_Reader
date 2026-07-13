@@ -10,8 +10,62 @@ use regex::Regex;
 static SENDER_PREFIX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[^:\r\n]{1,40}:\s").unwrap());
 
+/// Matches URLs (http/https) to replace with friendlier spoken text.
+static URL_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"https?://[^\s]+").unwrap());
+
 fn looks_like_group_message(body: &str) -> bool {
     SENDER_PREFIX.is_match(body)
+}
+
+/// Extract a friendly domain name from a URL for speech.
+/// Examples:
+///   https://www.instagram.com/reel/... → "instagram"
+///   https://youtu.be/xAIeA3ewRbo       → "youtube"
+///   https://github.com/user/repo       → "github"
+fn extract_domain(url: &str) -> String {
+    // Strip protocol
+    let after_protocol = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .unwrap_or(url);
+
+    // Take the part before the first '/' or '?' (the hostname)
+    let hostname = after_protocol
+        .split(&['/', '?'][..])
+        .next()
+        .unwrap_or(after_protocol);
+
+    // Strip "www." prefix
+    let without_www = hostname.strip_prefix("www.").unwrap_or(hostname);
+
+    // Normalize common short domains
+    let normalized = match without_www {
+        "youtu.be" => "youtube",
+        "goo.gl" => "google",
+        "bit.ly" => "bitly",
+        "t.co" => "twitter",
+        _ => without_www,
+    };
+
+    // Take just the main domain (drop TLD and subdomains for simplicity)
+    normalized
+        .split('.')
+        .next()
+        .unwrap_or(normalized)
+        .to_string()
+}
+
+/// Replace URLs in text with "domain link" for friendlier speech.
+/// Example: "Check this https://youtu.be/abc123" → "Check this youtube link"
+fn clean_urls(text: &str) -> String {
+    URL_PATTERN
+        .replace_all(text, |caps: &regex::Captures| {
+            let url = &caps[0];
+            let domain = extract_domain(url);
+            format!("{} link", domain)
+        })
+        .to_string()
 }
 
 /// Build the spoken string from a notification's text parts.
@@ -21,8 +75,9 @@ fn looks_like_group_message(body: &str) -> bool {
 ///  * For a WhatsApp **group** (the body starts with "Someone: ..."), the first text
 ///    part is the group name and is skipped; we speak only the sender-prefixed body.
 ///  * For a 1-on-1 chat / generic toast, the first part (contact/title) is kept.
+///  * URLs are replaced with "domain link" (e.g. "https://youtu.be/abc" → "youtube link").
 pub fn build_spoken_text(parts: &[String]) -> String {
-    match parts.len() {
+    let raw = match parts.len() {
         0 => String::new(),
         1 => parts[0].clone(),
         _ => {
@@ -40,7 +95,8 @@ pub fn build_spoken_text(parts: &[String]) -> String {
                 s
             }
         }
-    }
+    };
+    clean_urls(&raw)
 }
 
 fn rule_matches(rule: &FilterRule, haystack: &str) -> bool {
@@ -128,5 +184,29 @@ mod tests {
         }];
         assert!(passes_filters("WhatsApp", "hi", &rules));
         assert!(!passes_filters("Email", "hi", &rules));
+    }
+
+    #[test]
+    fn url_instagram_replaced_with_domain() {
+        let parts = vec!["Check this out https://www.instagram.com/reel/DauPDIGFJVX/?igsh=MXE3Mjk4em55Nzg4cQ==".to_string()];
+        assert_eq!(build_spoken_text(&parts), "Check this out instagram link");
+    }
+
+    #[test]
+    fn url_youtube_short_domain() {
+        let parts = vec!["Watch https://youtu.be/xAIeA3ewRbo".to_string()];
+        assert_eq!(build_spoken_text(&parts), "Watch youtube link");
+    }
+
+    #[test]
+    fn multiple_urls_in_message() {
+        let parts = vec!["See https://github.com/user/repo and https://google.com/search?q=test".to_string()];
+        assert_eq!(build_spoken_text(&parts), "See github link and google link");
+    }
+
+    #[test]
+    fn url_with_query_params() {
+        let parts = vec!["Link: https://www.instagram.com/reel/abc/?igsh=xyz".to_string()];
+        assert_eq!(build_spoken_text(&parts), "Link: instagram link");
     }
 }
