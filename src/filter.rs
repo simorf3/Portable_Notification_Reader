@@ -1,9 +1,9 @@
 //! Turns a raw notification into the exact words to speak, and decides whether it
 //! should be spoken at all (per-app mute + user filter rules).
 
-use crate::config::FilterRule;
+use crate::config::{FilterRule, ReplaceRule, TextFilter};
 use once_cell::sync::Lazy;
-use regex::Regex;
+use regex::{escape, Regex};
 
 /// Matches a "Sender: message" prefix used by WhatsApp *group* toasts, where the
 /// body already names who spoke (e.g. "Alice: are we still on?").
@@ -97,6 +97,55 @@ pub fn build_spoken_text(parts: &[String]) -> String {
         }
     };
     clean_urls(&raw)
+}
+
+/// Remove every match of the user's "Filter text" rules from `text`.
+/// A plain (non-regex) pattern is matched case-insensitively; an invalid regex
+/// is skipped so a bad rule can never crash speaking.
+pub fn apply_text_filters(text: &str, rules: &[TextFilter]) -> String {
+    let mut out = text.to_string();
+    for r in rules {
+        if r.pattern.trim().is_empty() {
+            continue;
+        }
+        let re = if r.is_regex {
+            Regex::new(&r.pattern)
+        } else {
+            // Case-insensitive literal match.
+            Regex::new(&format!("(?i){}", escape(&r.pattern)))
+        };
+        if let Ok(re) = re {
+            out = re.replace_all(&out, "").to_string();
+        }
+    }
+    out
+}
+
+/// Apply the user's "Replace text" rules to `text`, in order.
+/// Plain patterns match case-insensitively; an empty replacement deletes the match.
+pub fn apply_replacements(text: &str, rules: &[ReplaceRule]) -> String {
+    let mut out = text.to_string();
+    for r in rules {
+        if r.pattern.trim().is_empty() {
+            continue;
+        }
+        let re = if r.is_regex {
+            Regex::new(&r.pattern)
+        } else {
+            Regex::new(&format!("(?i){}", escape(&r.pattern)))
+        };
+        if let Ok(re) = re {
+            // `$` is special in the replacement; callers of the plain (non-regex)
+            // path expect a literal replacement, so escape it there.
+            let replacement = if r.is_regex {
+                r.replacement.clone()
+            } else {
+                r.replacement.replace('$', "$$")
+            };
+            out = re.replace_all(&out, replacement.as_str()).to_string();
+        }
+    }
+    out
 }
 
 fn rule_matches(rule: &FilterRule, haystack: &str) -> bool {
@@ -208,5 +257,43 @@ mod tests {
     fn url_with_query_params() {
         let parts = vec!["Link: https://www.instagram.com/reel/abc/?igsh=xyz".to_string()];
         assert_eq!(build_spoken_text(&parts), "Link: instagram link");
+    }
+
+    #[test]
+    fn text_filter_removes_substring_case_insensitive() {
+        let rules = vec![TextFilter { pattern: "URGENT:".into(), is_regex: false }];
+        assert_eq!(apply_text_filters("urgent: call me", &rules), " call me");
+    }
+
+    #[test]
+    fn text_filter_regex() {
+        let rules = vec![TextFilter { pattern: r"\[.*?\]".into(), is_regex: true }];
+        assert_eq!(apply_text_filters("[work] hello [tag]", &rules), " hello ");
+    }
+
+    #[test]
+    fn replacement_substitutes_word() {
+        let rules = vec![ReplaceRule { pattern: "u".into(), replacement: "you".into(), is_regex: false }];
+        // case-insensitive literal: both "U" and "u" replaced
+        assert_eq!(apply_replacements("cU soon", &rules), "cyou soon");
+    }
+
+    #[test]
+    fn replacement_empty_deletes() {
+        let rules = vec![ReplaceRule { pattern: "spam".into(), replacement: "".into(), is_regex: false }];
+        assert_eq!(apply_replacements("no spam here", &rules), "no  here");
+    }
+
+    #[test]
+    fn replacement_regex_with_groups() {
+        let rules = vec![ReplaceRule { pattern: r"(\d+)%".into(), replacement: "$1 percent".into(), is_regex: true }];
+        assert_eq!(apply_replacements("battery 80%", &rules), "battery 80 percent");
+    }
+
+    #[test]
+    fn invalid_regex_is_skipped() {
+        let rules = vec![TextFilter { pattern: "(".into(), is_regex: true }];
+        // bad regex must not panic and must leave text untouched
+        assert_eq!(apply_text_filters("hello (", &rules), "hello (");
     }
 }

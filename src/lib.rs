@@ -10,6 +10,7 @@ pub mod edge_tts;
 pub mod filter;
 pub mod locale;
 pub mod notifications;
+pub mod text_shaping;
 pub mod voices;
 
 #[cfg(windows)]

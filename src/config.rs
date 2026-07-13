@@ -26,6 +26,31 @@ fn default_true() -> bool {
     true
 }
 
+/// A rule that removes matching text from a message before it is spoken.
+/// (Menu: Filters → Filter text.)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TextFilter {
+    /// Text or regex to strip out of the spoken message.
+    pub pattern: String,
+    /// If true `pattern` is a regular expression, otherwise a plain substring.
+    #[serde(default)]
+    pub is_regex: bool,
+}
+
+/// A rule that replaces matching text with something else before speaking.
+/// (Menu: Filters → Replace text.) An empty `replacement` deletes the match.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplaceRule {
+    /// Text or regex to find.
+    pub pattern: String,
+    /// What to replace it with (may be empty to simply remove it).
+    #[serde(default)]
+    pub replacement: String,
+    /// If true `pattern` is a regular expression, otherwise a plain substring.
+    #[serde(default)]
+    pub is_regex: bool,
+}
+
 fn default_volume() -> u32 {
     130
 }
@@ -56,6 +81,16 @@ pub struct Config {
     pub known_apps: Vec<String>,
     /// User filter rules.
     pub filters: Vec<FilterRule>,
+    /// Text/phrases removed from a message before it is spoken.
+    #[serde(default)]
+    pub text_filters: Vec<TextFilter>,
+    /// Find/replace rules applied to a message before it is spoken.
+    #[serde(default)]
+    pub replacements: Vec<ReplaceRule>,
+    /// When true, emojis are spoken by their meaning (e.g. "smiling face").
+    /// When false (default), emojis are removed from the message before speaking.
+    #[serde(default)]
+    pub speak_emojis: bool,
     /// How often to poll the notification database, in milliseconds.
     pub poll_interval_ms: u64,
 }
@@ -71,6 +106,9 @@ impl Default for Config {
             muted_apps: Vec::new(),
             known_apps: Vec::new(),
             filters: Vec::new(),
+            text_filters: Vec::new(),
+            replacements: Vec::new(),
+            speak_emojis: false,
             poll_interval_ms: default_poll(),
         }
     }

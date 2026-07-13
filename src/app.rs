@@ -8,7 +8,7 @@
 //!   with an explicit blacklist / whitelist choice.
 //! * Both a left-click and a right-click on the tray icon open the menu.
 
-use crate::config::{Config, FilterRule};
+use crate::config::{Config, FilterRule, ReplaceRule, TextFilter};
 use crate::worker::{PreviewSlot, SayQueue, SharedCatalog, SharedConfig};
 use crate::{locale, voices};
 use std::cell::RefCell;
@@ -36,6 +36,7 @@ const SAMPLE_TEXT: &str = "Hello, this is a preview of the selected notification
 #[derive(Clone)]
 enum Action {
     ToggleEnabled,
+    ToggleSpeakEmojis,
     SelectVoice(String),
     ToggleShowAll,
     SetVolume(u32),
@@ -43,7 +44,8 @@ enum Action {
     ToggleMuteApp(String),
     TestVoice,
     ManageFilters,
-    OpenConfig,
+    ManageTextFilters,
+    ManageReplacements,
     OpenFolder,
     About,
     Exit,
@@ -77,6 +79,35 @@ pub struct App {
     fadd: nwg::Button,
     fremove: nwg::Button,
     fclose: nwg::Button,
+
+    // ---- "Filter text" window (remove phrases before speaking) ----
+    twindow: nwg::Window,
+    #[allow(dead_code)]
+    thint: nwg::Label,
+    tlist: nwg::ListBox<String>,
+    #[allow(dead_code)]
+    tpattern_label: nwg::Label,
+    tpattern: nwg::TextInput,
+    tregex: nwg::CheckBox,
+    tadd: nwg::Button,
+    tremove: nwg::Button,
+    tclose: nwg::Button,
+
+    // ---- "Replace text" window (find → replace before speaking) ----
+    rwindow: nwg::Window,
+    #[allow(dead_code)]
+    rhint: nwg::Label,
+    rlist: nwg::ListBox<String>,
+    #[allow(dead_code)]
+    rfind_label: nwg::Label,
+    rfind: nwg::TextInput,
+    #[allow(dead_code)]
+    rwith_label: nwg::Label,
+    rwith: nwg::TextInput,
+    rregex: nwg::CheckBox,
+    radd: nwg::Button,
+    rremove: nwg::Button,
+    rclose: nwg::Button,
 
     // Dynamic menu controls are stored so their native handles stay alive while
     // the menu is on screen. They are replaced wholesale on every rebuild.
@@ -128,7 +159,7 @@ impl App {
         nwg::TrayNotification::builder()
             .parent(&window)
             .icon(Some(&icon))
-            .tip(Some("Portable Notification Reader"))
+            .tip(Some("Portable Notification Reader \u{2013} running (click for menu)"))
             .build(&mut tray)?;
 
         // ---- Filters window ----
@@ -232,6 +263,169 @@ impl App {
             .size((90, 30))
             .build(&mut fclose)?;
 
+        // ---- "Filter text" window ----
+        let mut twindow = nwg::Window::default();
+        nwg::Window::builder()
+            .title("Filter text")
+            .flags(nwg::WindowFlags::WINDOW)
+            .size((490, 400))
+            .center(true)
+            .build(&mut twindow)?;
+
+        let mut thint = nwg::Label::default();
+        nwg::Label::builder()
+            .text(
+                "Remove words or phrases from a message before it is spoken.\n\
+                 The rest of the message is still read \u{2013} only the matched text is dropped.",
+            )
+            .parent(&twindow)
+            .position((12, 10))
+            .size((466, 44))
+            .build(&mut thint)?;
+
+        let mut tlist = nwg::ListBox::default();
+        nwg::ListBox::builder()
+            .parent(&twindow)
+            .position((12, 62))
+            .size((466, 190))
+            .build(&mut tlist)?;
+
+        let mut tpattern_label = nwg::Label::default();
+        nwg::Label::builder()
+            .text("Text / pattern:")
+            .parent(&twindow)
+            .position((12, 266))
+            .size((100, 22))
+            .build(&mut tpattern_label)?;
+
+        let mut tpattern = nwg::TextInput::default();
+        nwg::TextInput::builder()
+            .parent(&twindow)
+            .position((114, 264))
+            .size((364, 24))
+            .build(&mut tpattern)?;
+
+        let mut tregex = nwg::CheckBox::default();
+        nwg::CheckBox::builder()
+            .text("Treat as a regular expression")
+            .parent(&twindow)
+            .position((12, 296))
+            .size((300, 22))
+            .build(&mut tregex)?;
+
+        let mut tadd = nwg::Button::default();
+        nwg::Button::builder()
+            .text("Add rule")
+            .parent(&twindow)
+            .position((12, 328))
+            .size((110, 30))
+            .build(&mut tadd)?;
+
+        let mut tremove = nwg::Button::default();
+        nwg::Button::builder()
+            .text("Remove selected")
+            .parent(&twindow)
+            .position((132, 328))
+            .size((150, 30))
+            .build(&mut tremove)?;
+
+        let mut tclose = nwg::Button::default();
+        nwg::Button::builder()
+            .text("Close")
+            .parent(&twindow)
+            .position((388, 328))
+            .size((90, 30))
+            .build(&mut tclose)?;
+
+        // ---- "Replace text" window ----
+        let mut rwindow = nwg::Window::default();
+        nwg::Window::builder()
+            .title("Replace text")
+            .flags(nwg::WindowFlags::WINDOW)
+            .size((490, 430))
+            .center(true)
+            .build(&mut rwindow)?;
+
+        let mut rhint = nwg::Label::default();
+        nwg::Label::builder()
+            .text(
+                "Replace a word or phrase with different text before speaking.\n\
+                 Leave \u{201C}Replace with\u{201D} empty to simply delete the matched text.",
+            )
+            .parent(&rwindow)
+            .position((12, 10))
+            .size((466, 44))
+            .build(&mut rhint)?;
+
+        let mut rlist = nwg::ListBox::default();
+        nwg::ListBox::builder()
+            .parent(&rwindow)
+            .position((12, 62))
+            .size((466, 170))
+            .build(&mut rlist)?;
+
+        let mut rfind_label = nwg::Label::default();
+        nwg::Label::builder()
+            .text("Find:")
+            .parent(&rwindow)
+            .position((12, 246))
+            .size((100, 22))
+            .build(&mut rfind_label)?;
+
+        let mut rfind = nwg::TextInput::default();
+        nwg::TextInput::builder()
+            .parent(&rwindow)
+            .position((114, 244))
+            .size((364, 24))
+            .build(&mut rfind)?;
+
+        let mut rwith_label = nwg::Label::default();
+        nwg::Label::builder()
+            .text("Replace with:")
+            .parent(&rwindow)
+            .position((12, 278))
+            .size((100, 22))
+            .build(&mut rwith_label)?;
+
+        let mut rwith = nwg::TextInput::default();
+        nwg::TextInput::builder()
+            .parent(&rwindow)
+            .position((114, 276))
+            .size((364, 24))
+            .build(&mut rwith)?;
+
+        let mut rregex = nwg::CheckBox::default();
+        nwg::CheckBox::builder()
+            .text("Treat \u{201C}Find\u{201D} as a regular expression")
+            .parent(&rwindow)
+            .position((12, 308))
+            .size((360, 22))
+            .build(&mut rregex)?;
+
+        let mut radd = nwg::Button::default();
+        nwg::Button::builder()
+            .text("Add rule")
+            .parent(&rwindow)
+            .position((12, 340))
+            .size((110, 30))
+            .build(&mut radd)?;
+
+        let mut rremove = nwg::Button::default();
+        nwg::Button::builder()
+            .text("Remove selected")
+            .parent(&rwindow)
+            .position((132, 340))
+            .size((150, 30))
+            .build(&mut rremove)?;
+
+        let mut rclose = nwg::Button::default();
+        nwg::Button::builder()
+            .text("Close")
+            .parent(&rwindow)
+            .position((388, 340))
+            .size((90, 30))
+            .build(&mut rclose)?;
+
         let app = Rc::new(App {
             cfg,
             catalog,
@@ -252,6 +446,26 @@ impl App {
             fadd,
             fremove,
             fclose,
+            twindow,
+            thint,
+            tlist,
+            tpattern_label,
+            tpattern,
+            tregex,
+            tadd,
+            tremove,
+            tclose,
+            rwindow,
+            rhint,
+            rlist,
+            rfind_label,
+            rfind,
+            rwith_label,
+            rwith,
+            rregex,
+            radd,
+            rremove,
+            rclose,
             menus: RefCell::new(Vec::new()),
             items: RefCell::new(Vec::new()),
             seps: RefCell::new(Vec::new()),
@@ -259,7 +473,7 @@ impl App {
             last_preview: RefCell::new(String::new()),
         });
 
-        // One handler for the tray/message window, one for the filters window.
+        // One handler per top-level window (tray/message + the three editors).
         let a1 = app.clone();
         let h1 = nwg::full_bind_event_handler(&app.window.handle, move |evt, data, handle| {
             a1.dispatch(evt, &data, handle);
@@ -268,8 +482,26 @@ impl App {
         let h2 = nwg::full_bind_event_handler(&app.fwindow.handle, move |evt, data, handle| {
             a2.dispatch(evt, &data, handle);
         });
+        let a3 = app.clone();
+        let h3 = nwg::full_bind_event_handler(&app.twindow.handle, move |evt, data, handle| {
+            a3.dispatch(evt, &data, handle);
+        });
+        let a4 = app.clone();
+        let h4 = nwg::full_bind_event_handler(&app.rwindow.handle, move |evt, data, handle| {
+            a4.dispatch(evt, &data, handle);
+        });
 
-        Ok((app, vec![h1, h2]))
+        // Announce that the app is running with a tray balloon that fades on its
+        // own. The balloon visually points at our tray icon, so the user knows
+        // where to find the app afterwards.
+        app.tray.show(
+            "Running in the notification tray. Left- or right-click the icon here for the menu.",
+            Some("Portable Notification Reader"),
+            Some(nwg::TrayNotificationFlags::USER_ICON | nwg::TrayNotificationFlags::LARGE_ICON),
+            Some(&app.icon),
+        );
+
+        Ok((app, vec![h1, h2, h3, h4]))
     }
 
     fn dispatch(&self, evt: nwg::Event, data: &nwg::EventData, handle: nwg::ControlHandle) {
@@ -284,12 +516,23 @@ impl App {
             E::OnMenuItemSelected => self.on_menu_select(handle),
             E::OnMenuHover => self.on_menu_hover(handle),
             E::OnButtonClick => self.on_button(handle),
-            E::OnWindowClose if handle == self.fwindow.handle => {
-                // Hide instead of destroying, so the window can be reopened.
-                if let nwg::EventData::OnWindowClose(close) = data {
-                    close.close(false);
+            E::OnWindowClose => {
+                // Hide instead of destroying, so any editor window can reopen.
+                if handle == self.fwindow.handle
+                    || handle == self.twindow.handle
+                    || handle == self.rwindow.handle
+                {
+                    if let nwg::EventData::OnWindowClose(close) = data {
+                        close.close(false);
+                    }
+                    if handle == self.fwindow.handle {
+                        self.fwindow.set_visible(false);
+                    } else if handle == self.twindow.handle {
+                        self.twindow.set_visible(false);
+                    } else {
+                        self.rwindow.set_visible(false);
+                    }
                 }
-                self.fwindow.set_visible(false);
             }
             _ => {}
         }
@@ -331,6 +574,7 @@ impl App {
     }
 
     fn on_button(&self, handle: nwg::ControlHandle) {
+        // ---- Filter messages window ----
         if handle == self.fadd.handle {
             self.add_filter();
         } else if handle == self.fremove.handle {
@@ -343,6 +587,20 @@ impl App {
         } else if handle == self.fallow.handle {
             self.fblock.set_check_state(nwg::RadioButtonState::Unchecked);
             self.fallow.set_check_state(nwg::RadioButtonState::Checked);
+        // ---- Filter text window ----
+        } else if handle == self.tadd.handle {
+            self.add_text_filter();
+        } else if handle == self.tremove.handle {
+            self.remove_text_filter();
+        } else if handle == self.tclose.handle {
+            self.twindow.set_visible(false);
+        // ---- Replace text window ----
+        } else if handle == self.radd.handle {
+            self.add_replacement();
+        } else if handle == self.rremove.handle {
+            self.remove_replacement();
+        } else if handle == self.rclose.handle {
+            self.rwindow.set_visible(false);
         }
     }
 
@@ -357,6 +615,7 @@ impl App {
     fn apply(&self, action: Action) {
         match action {
             Action::ToggleEnabled => self.with_cfg(|c| c.enabled = !c.enabled),
+            Action::ToggleSpeakEmojis => self.with_cfg(|c| c.speak_emojis = !c.speak_emojis),
             Action::SelectVoice(id) => self.with_cfg(|c| c.selected_voice_id = id),
             Action::ToggleShowAll => self.with_cfg(|c| c.show_all_languages = !c.show_all_languages),
             Action::SetVolume(v) => self.with_cfg(|c| c.volume = v),
@@ -378,14 +637,8 @@ impl App {
                 }
             }
             Action::ManageFilters => self.show_filters(),
-            Action::OpenConfig => {
-                if let Ok(c) = self.cfg.lock() {
-                    let _ = c.save();
-                }
-                let _ = std::process::Command::new("notepad.exe")
-                    .arg(Config::config_path())
-                    .spawn();
-            }
+            Action::ManageTextFilters => self.show_text_filters(),
+            Action::ManageReplacements => self.show_replacements(),
             Action::OpenFolder => {
                 let _ = std::process::Command::new("explorer.exe")
                     .arg(Config::app_dir())
@@ -397,8 +650,7 @@ impl App {
                     "About Portable Notification Reader",
                     "Portable Notification Reader\n\n\
                      Reads your Windows notifications aloud using online neural voices \
-                     (with an offline fallback). Fully portable: all settings live in \
-                     config.json next to the executable.\n\n\
+                     (with an offline fallback).\n\n\
                      Left- or right-click the tray icon for the menu.",
                 );
             }
@@ -491,6 +743,139 @@ impl App {
         }
     }
 
+    // ---- Filter text window ----------------------------------------------
+
+    fn show_text_filters(&self) {
+        self.refresh_text_filters();
+        self.twindow.set_visible(true);
+        self.tpattern.set_focus();
+    }
+
+    fn refresh_text_filters(&self) {
+        let rules = self
+            .cfg
+            .lock()
+            .map(|c| c.text_filters.clone())
+            .unwrap_or_default();
+        let rows: Vec<String> = rules
+            .iter()
+            .map(|r| {
+                let re = if r.is_regex { "  [regex]" } else { "" };
+                format!("\u{2702} remove: {}{re}", r.pattern)
+            })
+            .collect();
+        self.tlist.set_collection(rows);
+    }
+
+    fn add_text_filter(&self) {
+        let pattern = self.tpattern.text().trim().to_string();
+        if pattern.is_empty() {
+            nwg::modal_info_message(
+                &self.twindow.handle,
+                "Filter text",
+                "Please type some text (or a regular expression) to remove.",
+            );
+            return;
+        }
+        let is_regex = self.tregex.check_state() == nwg::CheckBoxState::Checked;
+        self.with_cfg(|c| {
+            c.text_filters.push(TextFilter {
+                pattern: pattern.clone(),
+                is_regex,
+            });
+        });
+        self.tpattern.set_text("");
+        self.refresh_text_filters();
+    }
+
+    fn remove_text_filter(&self) {
+        if let Some(idx) = self.tlist.selection() {
+            self.with_cfg(|c| {
+                if idx < c.text_filters.len() {
+                    c.text_filters.remove(idx);
+                }
+            });
+            self.refresh_text_filters();
+        } else {
+            nwg::modal_info_message(
+                &self.twindow.handle,
+                "Filter text",
+                "Select a rule in the list first, then click Remove selected.",
+            );
+        }
+    }
+
+    // ---- Replace text window ---------------------------------------------
+
+    fn show_replacements(&self) {
+        self.refresh_replacements();
+        self.rwindow.set_visible(true);
+        self.rfind.set_focus();
+    }
+
+    fn refresh_replacements(&self) {
+        let rules = self
+            .cfg
+            .lock()
+            .map(|c| c.replacements.clone())
+            .unwrap_or_default();
+        let rows: Vec<String> = rules
+            .iter()
+            .map(|r| {
+                let re = if r.is_regex { "  [regex]" } else { "" };
+                let to = if r.replacement.is_empty() {
+                    "(removed)".to_string()
+                } else {
+                    format!("\u{201C}{}\u{201D}", r.replacement)
+                };
+                format!("\u{201C}{}\u{201D} \u{2192} {to}{re}", r.pattern)
+            })
+            .collect();
+        self.rlist.set_collection(rows);
+    }
+
+    fn add_replacement(&self) {
+        let pattern = self.rfind.text().trim().to_string();
+        if pattern.is_empty() {
+            nwg::modal_info_message(
+                &self.rwindow.handle,
+                "Replace text",
+                "Please type the text (or a regular expression) to find.",
+            );
+            return;
+        }
+        // Replacement may be empty (that just deletes the match); keep it as typed.
+        let replacement = self.rwith.text();
+        let is_regex = self.rregex.check_state() == nwg::CheckBoxState::Checked;
+        self.with_cfg(|c| {
+            c.replacements.push(ReplaceRule {
+                pattern: pattern.clone(),
+                replacement: replacement.clone(),
+                is_regex,
+            });
+        });
+        self.rfind.set_text("");
+        self.rwith.set_text("");
+        self.refresh_replacements();
+    }
+
+    fn remove_replacement(&self) {
+        if let Some(idx) = self.rlist.selection() {
+            self.with_cfg(|c| {
+                if idx < c.replacements.len() {
+                    c.replacements.remove(idx);
+                }
+            });
+            self.refresh_replacements();
+        } else {
+            nwg::modal_info_message(
+                &self.rwindow.handle,
+                "Replace text",
+                "Select a rule in the list first, then click Remove selected.",
+            );
+        }
+    }
+
     // ---- menu construction -----------------------------------------------
 
     fn rebuild_menu(&self) {
@@ -499,10 +884,11 @@ impl App {
         let mut seps: Vec<nwg::MenuSeparator> = Vec::new();
         let mut actions: Vec<(nwg::ControlHandle, Action)> = Vec::new();
 
-        let (enabled, volume, rate, show_all, selected, known_apps, muted_apps, filters) = {
+        let (enabled, speak_emojis, volume, rate, show_all, selected, known_apps, muted_apps, filters, n_textfilters, n_replacements) = {
             let c = self.cfg.lock().unwrap();
             (
                 c.enabled,
+                c.speak_emojis,
                 c.volume,
                 c.rate,
                 c.show_all_languages,
@@ -510,6 +896,8 @@ impl App {
                 c.known_apps.clone(),
                 c.muted_apps.clone(),
                 c.filters.clone(),
+                c.text_filters.len(),
+                c.replacements.len(),
             )
         };
         let all_voices = self.catalog.lock().map(|c| c.all()).unwrap_or_default();
@@ -533,6 +921,14 @@ impl App {
             root_h,
             if enabled { "\u{2714} Reading notifications: ON" } else { "\u{2716} Reading notifications: OFF" },
             Some(Action::ToggleEnabled),
+            true,
+        );
+        add_item(
+            &mut items,
+            &mut actions,
+            root_h,
+            if speak_emojis { "\u{2714} Speak emojis: ON" } else { "\u{2610} Speak emojis: OFF" },
+            Some(Action::ToggleSpeakEmojis),
             true,
         );
         add_sep(&mut seps, root_h);
@@ -621,19 +1017,35 @@ impl App {
             }
         }
 
-        // ---- Filters (opens the GUI window) ----
+        // ---- Filters submenu (each item opens its own editor window) ----
+        let filters_menu = add_submenu(&mut menus, root_h, "Filters");
         add_item(
             &mut items,
             &mut actions,
-            root_h,
-            &format!("Filters\u{2026} ({} rule{})", filters.len(), if filters.len() == 1 { "" } else { "s" }),
+            filters_menu,
+            &format!("Filter messages\u{2026} ({} rule{})", filters.len(), plural(filters.len())),
             Some(Action::ManageFilters),
+            true,
+        );
+        add_item(
+            &mut items,
+            &mut actions,
+            filters_menu,
+            &format!("Filter text\u{2026} ({} rule{})", n_textfilters, plural(n_textfilters)),
+            Some(Action::ManageTextFilters),
+            true,
+        );
+        add_item(
+            &mut items,
+            &mut actions,
+            filters_menu,
+            &format!("Replace text\u{2026} ({} rule{})", n_replacements, plural(n_replacements)),
+            Some(Action::ManageReplacements),
             true,
         );
 
         // ---- Footer ----
         add_sep(&mut seps, root_h);
-        add_item(&mut items, &mut actions, root_h, "Open config file", Some(Action::OpenConfig), true);
         add_item(&mut items, &mut actions, root_h, "Open app folder", Some(Action::OpenFolder), true);
         add_item(&mut items, &mut actions, root_h, "About", Some(Action::About), true);
         add_sep(&mut seps, root_h);
@@ -647,6 +1059,15 @@ impl App {
 }
 
 // ---- small builder helpers -------------------------------------------------
+
+/// "" for a count of 1, "s" otherwise (for "1 rule" / "3 rules").
+fn plural(n: usize) -> &'static str {
+    if n == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
 
 fn add_item(
     items: &mut Vec<nwg::MenuItem>,
