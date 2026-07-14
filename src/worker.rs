@@ -212,9 +212,9 @@ fn handle_notification(
         return;
     }
 
-    // Stay quiet while the microphone is in use (call/recording), if enabled.
-    if pause_on_mic && crate::mic::microphone_in_use() {
-        log::debug!("skipping notification: microphone in use");
+    // Stay quiet while on a call / in a meeting (mic or camera in use), if enabled.
+    if pause_on_mic && crate::mic::in_meeting() {
+        log::debug!("skipping notification: on a call / in a meeting (mic or camera in use)");
         return;
     }
     if n.text_parts.is_empty() {

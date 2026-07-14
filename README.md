@@ -43,10 +43,12 @@ It is a ground-up **Rust** rewrite of the original C# app, redesigned to be
   Unicode CLDR coverage including multi-part sequences (skin tones, ZWJ families).
 - **Shorthand expansion** — common chat abbreviations (lol, brb, omg, etc.) are
   automatically expanded to full words before speaking.
-- **Pause while microphone in use** — optional toggle (off by default) that keeps
-  the app silent whenever another app (a call, meeting or recording) is using the
-  microphone, so it never talks over you. Detected via the Windows privacy
-  consent store — no audio device is opened and no admin rights are needed.
+- **Pause during calls/meetings** — optional toggle (off by default) that keeps
+  the app silent while you are on a call or in a meeting, so it never talks over
+  you. It watches whether any app is using the **microphone or the camera** (via
+  the Windows privacy consent store), which reliably covers Teams, Slack Huddles,
+  Zoom, Meet, Discord, etc. without any per-app hacks — no audio/video device is
+  opened and no admin rights are needed.
 - **Smart speech shaping** (matches the original app):
   - the **app name is never read aloud**;
   - for a **WhatsApp group**, the group name is skipped and only the
@@ -187,7 +189,7 @@ Field notes:
 | `volume` | `0`..`200`. `100` = normal; above `100` amplifies (louder than system). |
 | `show_all_languages` | `false` = only voices matching the Windows display language. |
 | `speak_emojis` | `false` (default) strips emojis; `true` speaks their meanings (e.g. 🎉 → "party popper"). |
-| `pause_on_mic` | `true` keeps the app silent while another app is using the microphone. Default `false`. |
+| `pause_on_mic` | `true` keeps the app silent while you are on a call/in a meeting (any app using the microphone **or** camera). Default `false`. |
 | `poll_interval_ms` | How often the notification DB is polled (minimum 250 ms; 1000 ms recommended). |
 | `filters[].block` | `true` blocks matching notifications; `false` switches to allow-list mode. |
 | `replacements[]` | Text filtering & replacement rules. Empty `replacement` removes the match. |
@@ -242,7 +244,7 @@ arrive after it starts, so it never re-reads your notification backlog.
 | `src/drm.rs` / `src/edge_tts.rs` | Edge neural TTS auth + WebSocket synthesis. |
 | `src/speech.rs` | Audio playback (online) + SAPI offline fallback. |
 | `src/locale.rs` | Detects the Windows display language. |
-| `src/mic.rs` | Detects whether the microphone is currently in use (registry). |
+| `src/mic.rs` | Detects whether the microphone or camera is currently in use — i.e. on a call/in a meeting (registry). |
 | `src/worker.rs` | Background polling/speaking thread. |
 | `src/app.rs` | System-tray UI and menu. |
 | `.github/workflows/build.yml` | Windows CI build + release. |

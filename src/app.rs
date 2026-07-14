@@ -374,9 +374,12 @@ impl App {
         let ah: i32 = 120;
         let screen_w = nwg::Monitor::width();
         let screen_h = nwg::Monitor::height();
-        // ~64px clearance for the taskbar; clamp so we never go off-screen.
-        let ax = (screen_w - aw - 24).max(0);
-        let ay = (screen_h - ah - 64).max(0);
+        // Sit higher up and further left of the far-right corner so the arrow
+        // points at the general tray-icon area (which lives to the LEFT of the
+        // clock/date) rather than at the clock itself. Clamp so we never go
+        // off-screen on small displays.
+        let ax = (screen_w - aw - 220).max(0);
+        let ay = (screen_h - ah - 150).max(0);
 
         let mut awindow = nwg::Window::default();
         nwg::Window::builder()
@@ -881,9 +884,9 @@ impl App {
             &mut actions,
             root_h,
             if pause_on_mic {
-                "\u{2714} Pause while microphone in use"
+                "\u{2714} Pause during calls/meetings (mic or camera)"
             } else {
-                "\u{2610} Pause while microphone in use"
+                "\u{2610} Pause during calls/meetings (mic or camera)"
             },
             Some(Action::TogglePauseOnMic),
             true,
