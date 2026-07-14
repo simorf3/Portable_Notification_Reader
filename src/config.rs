@@ -79,6 +79,11 @@ pub struct Config {
     /// When false (default), emojis are removed from the message before speaking.
     #[serde(default)]
     pub speak_emojis: bool,
+    /// When true, notifications are NOT spoken while the microphone is in use by
+    /// another app (e.g. a call or recording), so the app stays quiet during
+    /// meetings. Default off.
+    #[serde(default)]
+    pub pause_on_mic: bool,
     /// How often to poll the notification database, in milliseconds.
     pub poll_interval_ms: u64,
 }
@@ -96,6 +101,7 @@ impl Default for Config {
             filters: Vec::new(),
             replacements: Vec::new(),
             speak_emojis: false,
+            pause_on_mic: false,
             poll_interval_ms: default_poll(),
         }
     }

@@ -15,16 +15,15 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-// Extended window styles for the transient "arrow" hint window:
-//   WS_EX_TOOLWINDOW  (0x0080)      – no taskbar button
-//   WS_EX_TOPMOST     (0x0008_0000) – float above other windows
-//   WS_EX_NOACTIVATE  (0x0800_0000) – never steals focus from the foreground app
+// Extended window style for the transient startup hint window:
+//   WS_EX_TOOLWINDOW (0x0080) – keep it out of the taskbar / Alt-Tab list.
 //
-// NOTE: we deliberately do *not* set WS_EX_TRANSPARENT here. On a top-level
-// window that flag stops the window from ever painting its own content (it is
-// composited after everything beneath it and nothing triggers a repaint), so
-// the hint would show up blank / invisible — which is exactly the bug we hit.
-const ARROW_EX_FLAGS: u32 = 0x0080 | 0x0008_0000 | 0x0800_0000;
+// The hint is a *normal titled* window (WindowFlags::WINDOW) rather than a
+// borderless WS_POPUP. A plain popup has several ways to end up invisible
+// (no repaint, wrong z-order, never activated); a titled top-most window is
+// guaranteed to render and sit where we place it. It is also marked top-most
+// via the builder so it floats above other windows.
+const ARROW_EX_FLAGS: u32 = 0x0080;
 
 /// How long the startup "running in the tray" arrow hint stays on screen.
 const ARROW_HINT_SECS: u64 = 6;
@@ -52,6 +51,7 @@ const SAMPLE_TEXT: &str = "Hello, this is a preview of the selected notification
 enum Action {
     ToggleEnabled,
     ToggleSpeakEmojis,
+    TogglePauseOnMic,
     SelectVoice(String),
     ToggleShowAll,
     SetVolume(u32),
@@ -381,9 +381,10 @@ impl App {
         let mut awindow = nwg::Window::default();
         nwg::Window::builder()
             .title("Portable Notification Reader")
-            .flags(nwg::WindowFlags::POPUP)
+            .flags(nwg::WindowFlags::WINDOW) // caption + close, non-resizable
             .ex_flags(ARROW_EX_FLAGS)
             .topmost(true)
+            .icon(Some(&icon))
             .size((aw, ah))
             .position((ax, ay))
             .build(&mut awindow)?;
@@ -483,6 +484,10 @@ impl App {
         let h3 = nwg::full_bind_event_handler(&app.rwindow.handle, move |evt, data, handle| {
             a3.dispatch(evt, &data, handle);
         });
+        let a4 = app.clone();
+        let h4 = nwg::full_bind_event_handler(&app.awindow.handle, move |evt, data, handle| {
+            a4.dispatch(evt, &data, handle);
+        });
 
         // Announce that the app is running with a tray balloon that fades on its
         // own. The balloon visually points at our tray icon, so the user knows
@@ -499,7 +504,7 @@ impl App {
         app.awindow.set_visible(true);
         app.arrow_timer.start();
 
-        Ok((app, vec![h1, h2, h3]))
+        Ok((app, vec![h1, h2, h3, h4]))
     }
 
     fn dispatch(&self, evt: nwg::Event, data: &nwg::EventData, handle: nwg::ControlHandle) {
@@ -520,15 +525,23 @@ impl App {
                 self.awindow.set_visible(false);
             }
             E::OnWindowClose => {
-                // Hide instead of destroying, so any editor window can reopen.
-                if handle == self.fwindow.handle || handle == self.rwindow.handle {
+                // Hide instead of destroying, so the window can be shown again
+                // and closing it never quits the whole app.
+                if handle == self.fwindow.handle
+                    || handle == self.rwindow.handle
+                    || handle == self.awindow.handle
+                {
                     if let nwg::EventData::OnWindowClose(close) = data {
                         close.close(false);
                     }
                     if handle == self.fwindow.handle {
                         self.fwindow.set_visible(false);
-                    } else {
+                    } else if handle == self.rwindow.handle {
                         self.rwindow.set_visible(false);
+                    } else {
+                        // User dismissed the startup hint early — stop its timer.
+                        self.arrow_timer.stop();
+                        self.awindow.set_visible(false);
                     }
                 }
             }
@@ -607,6 +620,7 @@ impl App {
         match action {
             Action::ToggleEnabled => self.with_cfg(|c| c.enabled = !c.enabled),
             Action::ToggleSpeakEmojis => self.with_cfg(|c| c.speak_emojis = !c.speak_emojis),
+            Action::TogglePauseOnMic => self.with_cfg(|c| c.pause_on_mic = !c.pause_on_mic),
             Action::SelectVoice(id) => self.with_cfg(|c| c.selected_voice_id = id),
             Action::ToggleShowAll => self.with_cfg(|c| c.show_all_languages = !c.show_all_languages),
             Action::SetVolume(v) => self.with_cfg(|c| c.volume = v),
@@ -815,11 +829,12 @@ impl App {
         let mut seps: Vec<nwg::MenuSeparator> = Vec::new();
         let mut actions: Vec<(nwg::ControlHandle, Action)> = Vec::new();
 
-        let (enabled, speak_emojis, volume, rate, show_all, selected, known_apps, muted_apps, filters, n_replacements) = {
+        let (enabled, speak_emojis, pause_on_mic, volume, rate, show_all, selected, known_apps, muted_apps, filters, n_replacements) = {
             let c = self.cfg.lock().unwrap();
             (
                 c.enabled,
                 c.speak_emojis,
+                c.pause_on_mic,
                 c.volume,
                 c.rate,
                 c.show_all_languages,
@@ -859,6 +874,18 @@ impl App {
             root_h,
             if speak_emojis { "\u{2714} Speak emojis" } else { "\u{2610} Speak emojis" },
             Some(Action::ToggleSpeakEmojis),
+            true,
+        );
+        add_item(
+            &mut items,
+            &mut actions,
+            root_h,
+            if pause_on_mic {
+                "\u{2714} Pause while microphone in use"
+            } else {
+                "\u{2610} Pause while microphone in use"
+            },
+            Some(Action::TogglePauseOnMic),
             true,
         );
         add_sep(&mut seps, root_h);
@@ -934,7 +961,7 @@ impl App {
         }
 
         // ---- Apps submenu (per-app mute) ----
-        let apps_menu = add_submenu(&mut menus, root_h, "Disable apps");
+        let apps_menu = add_submenu(&mut menus, root_h, "Filter apps");
         if known_apps.is_empty() {
             add_item(&mut items, &mut actions, apps_menu, "No apps seen yet", None, false);
         } else {
@@ -947,12 +974,11 @@ impl App {
             }
         }
 
-        // ---- Filters submenu (each item opens its own editor window) ----
-        let filters_menu = add_submenu(&mut menus, root_h, "Filters");
+        // ---- Filter editors (top-level, each opens its own editor window) ----
         add_item(
             &mut items,
             &mut actions,
-            filters_menu,
+            root_h,
             &format!("Filter messages\u{2026} ({} rule{})", filters.len(), plural(filters.len())),
             Some(Action::ManageFilters),
             true,
@@ -960,7 +986,7 @@ impl App {
         add_item(
             &mut items,
             &mut actions,
-            filters_menu,
+            root_h,
             &format!("Filter and replace text\u{2026} ({} rule{})", n_replacements, plural(n_replacements)),
             Some(Action::ManageReplacements),
             true,

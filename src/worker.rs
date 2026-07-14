@@ -193,7 +193,7 @@ fn handle_notification(
     }
 
     // Snapshot the settings we need.
-    let (enabled, voice_id, gain, rate, muted, filters, replacements, speak_emojis) = {
+    let (enabled, voice_id, gain, rate, muted, filters, replacements, speak_emojis, pause_on_mic) = {
         let c = cfg.lock().unwrap();
         (
             c.enabled,
@@ -204,10 +204,17 @@ fn handle_notification(
             c.filters.clone(),
             c.replacements.clone(),
             c.speak_emojis,
+            c.pause_on_mic,
         )
     };
 
     if !enabled || muted {
+        return;
+    }
+
+    // Stay quiet while the microphone is in use (call/recording), if enabled.
+    if pause_on_mic && crate::mic::microphone_in_use() {
+        log::debug!("skipping notification: microphone in use");
         return;
     }
     if n.text_parts.is_empty() {

@@ -9,6 +9,7 @@ pub mod drm;
 pub mod edge_tts;
 pub mod filter;
 pub mod locale;
+pub mod mic;
 pub mod notifications;
 pub mod text_shaping;
 pub mod voices;
