@@ -43,7 +43,7 @@ It is a ground-up **Rust** rewrite of the original C# app, redesigned to be
   Unicode CLDR coverage including multi-part sequences (skin tones, ZWJ families).
 - **Shorthand expansion** — common chat abbreviations (lol, brb, omg, etc.) are
   automatically expanded to full words before speaking.
-- **Pause during calls/meetings** — optional toggle (off by default) that keeps
+- **Pause during calls/meetings** — toggle (on by default) that keeps
   the app silent while you are on a call or in a meeting, so it never talks over
   you. It watches whether any app is using the **microphone or the camera** (via
   the Windows privacy consent store), which reliably covers Teams, Slack Huddles,
@@ -165,7 +165,7 @@ Created next to the executable. Example:
   "volume": 130,
   "show_all_languages": false,
   "speak_emojis": false,
-  "pause_on_mic": false,
+  "pause_on_mic": true,
   "muted_apps": ["Microsoft Teams"],
   "known_apps": ["WhatsApp", "Microsoft Teams", "Mail"],
   "filters": [
@@ -189,7 +189,7 @@ Field notes:
 | `volume` | `0`..`200`. `100` = normal; above `100` amplifies (louder than system). |
 | `show_all_languages` | `false` = only voices matching the Windows display language. |
 | `speak_emojis` | `false` (default) strips emojis; `true` speaks their meanings (e.g. 🎉 → "party popper"). |
-| `pause_on_mic` | `true` keeps the app silent while you are on a call/in a meeting (any app using the microphone **or** camera). Default `false`. |
+| `pause_on_mic` | `true` (default) keeps the app silent while you are on a call/in a meeting (any app using the microphone **or** camera). Set `false` to always read. |
 | `poll_interval_ms` | How often the notification DB is polled (minimum 250 ms; 1000 ms recommended). |
 | `filters[].block` | `true` blocks matching notifications; `false` switches to allow-list mode. |
 | `replacements[]` | Text filtering & replacement rules. Empty `replacement` removes the match. |

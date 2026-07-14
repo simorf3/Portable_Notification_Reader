@@ -374,12 +374,12 @@ impl App {
         let ah: i32 = 120;
         let screen_w = nwg::Monitor::width();
         let screen_h = nwg::Monitor::height();
-        // Sit higher up and further left of the far-right corner so the arrow
+        // Sit well up and to the left of the far-right corner so the arrow
         // points at the general tray-icon area (which lives to the LEFT of the
         // clock/date) rather than at the clock itself. Clamp so we never go
         // off-screen on small displays.
-        let ax = (screen_w - aw - 220).max(0);
-        let ay = (screen_h - ah - 150).max(0);
+        let ax = (screen_w - aw - 430).max(0);
+        let ay = (screen_h - ah - 320).max(0);
 
         let mut awindow = nwg::Window::default();
         nwg::Window::builder()
@@ -392,16 +392,26 @@ impl App {
             .position((ax, ay))
             .build(&mut awindow)?;
 
+        // Show the app's own icon so the user knows exactly what to look for
+        // in the tray.
+        let mut aicon = nwg::ImageFrame::default();
+        nwg::ImageFrame::builder()
+            .icon(Some(&icon))
+            .parent(&awindow)
+            .position((16, 14))
+            .size((32, 32))
+            .build(&mut aicon)?;
+
         let mut atext = nwg::Label::default();
         nwg::Label::builder()
             .text(
                 "Portable Notification Reader is running.\n\
-                 It lives down here in the notification tray \u{2013} \
-                 click the icon any time for the menu.",
+                 Look for this icon in the notification tray (bottom-right) \u{2013} \
+                 click it any time for the menu.",
             )
             .parent(&awindow)
-            .position((14, 12))
-            .size((312, 66))
+            .position((58, 12))
+            .size((268, 72))
             .build(&mut atext)?;
 
         // Big arrow pointing down-right toward the tray / overflow area.
@@ -871,24 +881,45 @@ impl App {
             Some(Action::ToggleEnabled),
             true,
         );
+        // ---- Pause during calls/meetings (hover to see how it works) ----
+        // Windows tray (pop-up) menus can't show real per-item tooltips, so the
+        // explanation lives inside this submenu: hovering the item reveals it,
+        // and the last entry toggles the feature on/off.
+        let pause_menu = add_submenu(
+            &mut menus,
+            root_h,
+            if pause_on_mic {
+                "\u{2714} Pause during calls/meetings"
+            } else {
+                "\u{2610} Pause during calls/meetings"
+            },
+        );
+        add_item(&mut items, &mut actions, pause_menu, "How it works:", None, false);
+        add_item(&mut items, &mut actions, pause_menu, "    Stops reading aloud while any app is using", None, false);
+        add_item(&mut items, &mut actions, pause_menu, "    your microphone or camera (Teams, Zoom,", None, false);
+        add_item(&mut items, &mut actions, pause_menu, "    Slack, Meet, Discord\u{2026}), then resumes after.", None, false);
+        add_item(&mut items, &mut actions, pause_menu, "    Uses Windows privacy settings \u{2013} no admin", None, false);
+        add_item(&mut items, &mut actions, pause_menu, "    rights and no audio/video device is opened.", None, false);
+        add_sep(&mut seps, pause_menu);
+        add_item(
+            &mut items,
+            &mut actions,
+            pause_menu,
+            if pause_on_mic {
+                "\u{2714} On \u{2013} click to turn off"
+            } else {
+                "\u{2610} Off \u{2013} click to turn on"
+            },
+            Some(Action::TogglePauseOnMic),
+            true,
+        );
+
         add_item(
             &mut items,
             &mut actions,
             root_h,
             if speak_emojis { "\u{2714} Speak emojis" } else { "\u{2610} Speak emojis" },
             Some(Action::ToggleSpeakEmojis),
-            true,
-        );
-        add_item(
-            &mut items,
-            &mut actions,
-            root_h,
-            if pause_on_mic {
-                "\u{2714} Pause during calls/meetings (mic or camera)"
-            } else {
-                "\u{2610} Pause during calls/meetings (mic or camera)"
-            },
-            Some(Action::TogglePauseOnMic),
             true,
         );
         add_sep(&mut seps, root_h);
@@ -957,7 +988,15 @@ impl App {
         }
 
         // ---- Speed submenu ----
-        let speed_menu = add_submenu(&mut menus, root_h, &format!("Speed ({rate:+})"));
+        // Show the friendly preset name (e.g. "Normal") in the parent label
+        // rather than the raw number; fall back to a signed number if the
+        // current rate doesn't match a preset exactly.
+        let rate_label = SPEED_PRESETS
+            .iter()
+            .find(|(_, r)| *r == rate)
+            .map(|(name, _)| name.to_string())
+            .unwrap_or_else(|| format!("{rate:+}"));
+        let speed_menu = add_submenu(&mut menus, root_h, &format!("Speed ({rate_label})"));
         for &(name, r) in SPEED_PRESETS {
             let mark = if r == rate { "\u{25CF} " } else { "    " };
             add_item(&mut items, &mut actions, speed_menu, &format!("{mark}{name}"), Some(Action::SetRate(r)), true);
