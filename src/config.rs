@@ -53,19 +53,49 @@ fn default_voice() -> String {
 }
 
 /// Apps that are muted out of the box on a fresh install. These are noisy
-/// Windows system / utility sources that most people do not want read aloud.
-/// Communication apps (Teams, Outlook, WhatsApp, etc.) are intentionally left
-/// ON so their messages are spoken. Matching is case-insensitive.
+/// Windows system / utility / background sources that most people do not want
+/// read aloud (confirmations of an action you just took, sync/status chatter,
+/// hardware state changes, etc.). Communication apps (Teams, Outlook, WhatsApp,
+/// Slack, Discord, …) are intentionally left ON so their messages are spoken.
+///
+/// Matching is case-insensitive and by exact display name, so an entry only
+/// silences an app if that app reports this exact name — extra names are
+/// harmless. Users can add/remove any of these later via the "Mute apps" menu
+/// or a "Filter messages" rule (which also matches the app name, incl. regex).
 fn default_muted_apps() -> Vec<String> {
     [
-        "immersivecontrolpanel",
+        // --- Windows shell / settings / store ---
+        "immersivecontrolpanel", // Windows Settings
+        "Microsoft Store",
+        "Windows Update",
+        "Support Assist for PCs",
+        // --- Security / antivirus (background status) ---
         "Windows Security",
         "Security Center",
         "Security and Maintenance",
+        "Microsoft Defender",
+        "Windows Defender",
+        "Avast Antivirus",
+        "Bitdefender",
+        // --- High-frequency utility / clipboard / screenshot tools ---
         "Snipping Tool",
-        "Microsoft Store",
-        "Support Assist for PCs",
-        "Windows Update",
+        "Snip & Sketch",
+        "Ditto",
+        "Lightshot",
+        "ShareX",
+        // --- Cloud storage sync clients ---
+        "OneDrive",
+        "Microsoft OneDrive",
+        "Google Drive",
+        "Dropbox",
+        // --- VPN clients (auto-reconnect / status) ---
+        "NordVPN",
+        "FortiClient",
+        // --- System / hardware utilities (state changes) ---
+        "Bluetooth",
+        "Swift Pair",
+        "NVIDIA GeForce Experience",
+        "AMD Software",
     ]
     .iter()
     .map(|s| s.to_string())

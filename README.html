@@ -104,8 +104,21 @@
   <li><strong>Lower other apps while speaking (audio ducking)</strong> — on by default. Briefly turns the volume of other
       apps (a YouTube video, music, a game) down while a notification is read, then restores it. So a notification is
       never buried under, or shouted over, your media.</li>
-  <li><strong>Per-app mute</strong> — any app that has sent a notification appears in the <em>Filter apps</em> menu and can
-      be muted/unmuted with a click.</li>
+  <li><strong>Per-app mute</strong> — any app that has sent a notification appears in the <em>Mute apps</em> menu and can
+      be muted/unmuted with a click. A <strong>sensible default mute list</strong> ships out of the box, so common background
+      noise is silent immediately; communication apps (Microsoft Teams, Outlook, WhatsApp…) are <strong>not</strong> muted.
+      <ul>
+        <li><strong>Muted by default:</strong> Windows Settings, Microsoft Store, Windows Update, Support Assist;
+            Windows Security / Defender / Avast / Bitdefender; Snipping Tool, Snip &amp; Sketch, Ditto, Lightshot, ShareX;
+            OneDrive, Google Drive, Dropbox; NordVPN, FortiClient; Bluetooth / Swift Pair pairing, NVIDIA GeForce Experience,
+            AMD Software.</li>
+        <li>Matching is by the app’s display name (case-insensitive). These defaults only apply to a <strong>fresh</strong>
+            <code>config.json</code>; an existing config keeps your own choices.</li>
+        <li><strong>Mute by pattern (regex):</strong> to silence a whole family of apps at once — even ones you haven’t seen
+            yet — add a <em>Filter messages</em> rule. Filter rules match the <strong>app name as well as the text</strong>,
+            so a block rule like <code>(?i)vpn|antivirus|onedrive</code> mutes every matching app.</li>
+      </ul>
+  </li>
   <li><strong>Filter rules</strong> — block or allow notifications by substring or regex (top-level <em>Filter messages…</em>).</li>
   <li><strong>Text filtering and replacement</strong> — remove or replace words/phrases before speaking (plain or regex).
       Leave the replacement blank to simply delete the matched text.</li>
@@ -119,8 +132,7 @@
       (only “Sender: message” is read); URLs are replaced with friendly “domain link” text.</li>
   <li><strong>Start automatically at sign-in</strong> — on first run the app offers to add itself to your Windows Startup
       folder (asked only once; skipped if a shortcut already exists).</li>
-  <li><strong>Built-in help</strong> — this page is compiled into the exe; open it any time from <em>Open help (README)</em>
-      in the tray menu (single portable file, nothing extra to keep).</li>
+  <li><strong>Built-in help</strong> — this page is compiled into the exe; open it any time from <em>About / Help</em> in the tray menu (single portable file, nothing extra to keep).</li>
   <li><strong>Sensible defaults</strong> — noisy system sources (Windows Security, Snipping Tool, Windows settings…) are
       muted out of the box, while communication apps such as Microsoft Teams, Outlook and WhatsApp are read.</li>
   <li>Left-click <strong>or</strong> right-click the tray icon to open the menu.</li>
@@ -173,7 +185,7 @@ dialog from <em>Microsoft Defender SmartScreen</em>.</p>
   <li>Click the tray icon and pick a <strong>Voice</strong>, set <strong>Volume/Speed</strong>, and toggle
       <strong>Read notifications</strong>, <strong>Speak emojis</strong>, <strong>Pause during calls/meetings</strong> and
       <strong>Lower other apps while speaking</strong> on/off.</li>
-  <li>Use <strong>Filter apps</strong> to mute specific applications, and the top-level <strong>Filter messages…</strong> /
+  <li>Use <strong>Mute apps</strong> to mute specific applications, and the top-level <strong>Filter messages…</strong> /
       <strong>Filter and replace text…</strong> items to block/allow notifications or rewrite text before speaking.</li>
 </ol>
 <div class="callout tip">
@@ -242,6 +254,7 @@ filters, in order, before speaking.</p>
   <tr><td><code>src/mic.rs</code></td><td>Detects whether the microphone or camera is in use — i.e. on a call/in a meeting.</td></tr>
   <tr><td><code>src/audio_duck.rs</code></td><td>Lowers other apps’ volume while speaking, then restores it.</td></tr>
   <tr><td><code>src/logging.rs</code></td><td>Writes the diagnostics log next to the exe.</td></tr>
+  <tr><td><code>src/startup.rs</code></td><td>First-run “start at sign-in” prompt + Startup-folder shortcut creation.</td></tr>
   <tr><td><code>src/worker.rs</code></td><td>Background polling/speaking thread.</td></tr>
   <tr><td><code>src/app.rs</code></td><td>System-tray UI and menu.</td></tr>
   <tr><td><code>.github/workflows/build.yml</code></td><td>Windows CI build + release.</td></tr>
@@ -256,13 +269,20 @@ filters, in order, before speaking.</p>
   <ul>
     <li><strong>New:</strong> On first run the app offers to <strong>start automatically when you sign in</strong> (creates a
         shortcut in your Startup folder). It only asks once and never asks if the shortcut already exists.</li>
-    <li><strong>New:</strong> This help page is now <strong>built into the exe</strong> — open it any time from
-        <em>Open help (README)</em> in the menu; no separate file to keep.</li>
-    <li><strong>Changed:</strong> Sensible default mute list — noisy system sources (Windows Security, Snipping Tool,
-        Windows settings, etc.) are muted out of the box, while communication apps such as <strong>Microsoft Teams</strong>,
-        Outlook and WhatsApp are read. (Teams is no longer muted by default.)</li>
-    <li><strong>UI:</strong> <em>Speak emojis</em> now sits just below <em>Lower other apps while speaking</em>.</li>
-    <li><strong>Fix:</strong> Startup hint window now hugs the bottom-right corner next to the tray on any screen resolution.</li>
+    <li><strong>New:</strong> This help page is now <strong>built into the exe</strong> — open it any time from <em>About / Help</em> in the menu; no separate file to keep.</li>
+    <li><strong>Changed:</strong> Expanded, sensible default mute list — noisy system / utility / sync / security / hardware
+        sources (Windows Security &amp; Defender, Snipping Tool, Windows settings, OneDrive / Google Drive / Dropbox, VPN
+        clients, Bluetooth pairing, GPU control panels, etc.) are muted out of the box, while communication apps such as
+        <strong>Microsoft Teams</strong>, Outlook and WhatsApp are read. (Teams is no longer muted by default.)</li>
+    <li><strong>New:</strong> Mute whole app families with a regex — a <em>Filter messages</em> block rule matches the app
+        name too, so e.g. <code>(?i)vpn|antivirus|onedrive</code> silences every matching app.</li>
+    <li><strong>UI:</strong> The <em>Filter apps</em> menu is now called <strong>Mute apps</strong>.</li>
+    <li><strong>UI:</strong> <em>Pause during calls/meetings</em> is now a single toggle labelled
+        “Pause during calls/meetings (mic or camera in use)” (the explanatory submenu was removed).</li>
+    <li><strong>UI:</strong> <em>About</em> and help are merged into one <strong>About / Help</strong> item that offers to
+        open this guide; <em>Speak emojis</em> now sits just below <em>Lower other apps while speaking</em>.</li>
+    <li><strong>Fix:</strong> The startup hint arrow now points at the <strong>real tray-icon location</strong>
+        (looked up via <code>Shell_NotifyIconGetRect</code>) instead of a guessed corner.</li>
   </ul>
 
   <h3>Meetings, audio ducking &amp; diagnostics <span class="date">2026-07-14</span></h3>

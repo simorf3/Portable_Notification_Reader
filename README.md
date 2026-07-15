@@ -36,7 +36,23 @@ It is a ground-up **Rust** rewrite of the original C# app, redesigned to be
   *louder than the system default* (online voices only).
 - **Speaking speed** control.
 - **Per-app mute** — any app that has sent a notification appears in the
-  *Filter apps* menu and can be muted/unmuted with a click.
+  *Mute apps* menu and can be muted/unmuted with a click. A **sensible default
+  mute list** ships out of the box so common background noise is silent
+  immediately (see below); communication apps such as Microsoft Teams, Outlook
+  and WhatsApp are **not** muted, so their messages are read.
+  - **Muted by default:** Windows Settings, Microsoft Store, Windows Update,
+    Support Assist; Windows Security / Defender / Avast / Bitdefender; Snipping
+    Tool, Snip & Sketch, Ditto, Lightshot, ShareX; OneDrive, Google Drive,
+    Dropbox; NordVPN, FortiClient; Bluetooth / Swift Pair pairing,
+    NVIDIA GeForce Experience, AMD Software.
+  - Matching is by the app's display name (case-insensitive). These defaults
+    only apply to a **fresh** `config.json`; an existing config keeps your
+    choices.
+  - **Mute by pattern (regex):** to silence a whole family of apps at once —
+    even ones you haven't seen yet — add a **Filter messages** rule. Filter
+    rules match the **app name as well as the text**, so a block rule like
+    `(?i)vpn|antivirus|onedrive` mutes every matching app. This is the
+    "regex mute apps" capability, reusing the existing filter engine.
 - **Lower other apps while speaking (audio ducking)** — on by default. Briefly
   turns other apps (a video, music, a game) down while a notification is read,
   then restores them, so notifications are never buried or talked over.
@@ -68,7 +84,7 @@ It is a ground-up **Rust** rewrite of the original C# app, redesigned to be
   itself to your Windows Startup folder (asked only once; skipped if a shortcut
   already exists).
 - **Built-in help** — this README is compiled into the exe; open it any time
-  from *Open help (README)* in the tray menu (single portable file, nothing
+  from *About / Help* in the tray menu (single portable file, nothing
   extra to keep).
 - **Sensible defaults** — noisy system sources (Windows Security, Snipping Tool,
   Windows settings, etc.) are muted out of the box, while communication apps
@@ -155,7 +171,7 @@ match, the file is exactly what the CI built.
    appears; `config.json` is created next to it on first save.
 2. Click the tray icon and pick a **Voice**, set **Volume/Speed**, and toggle
    **Read notifications** and **Speak emojis** on/off.
-3. Use **Filter apps** to mute specific applications, and the **Filter
+3. Use **Mute apps** to mute specific applications, and the **Filter
    messages…** / **Filter and replace text…** items to block/allow notifications
    or rewrite text before speaking.
 
@@ -267,6 +283,7 @@ arrive after it starts, so it never re-reads your notification backlog.
 | `src/mic.rs` | Detects whether the microphone or camera is currently in use — i.e. on a call/in a meeting (registry). |
 | `src/audio_duck.rs` | Lowers other apps' audio sessions while speaking, restores them afterwards (Windows Core Audio). |
 | `src/logging.rs` | Writes the diagnostics log (`notification-reader.log`) next to the exe. |
+| `src/startup.rs` | First-run "start at sign-in" prompt + Startup-folder shortcut creation. |
 | `src/worker.rs` | Background polling/speaking thread. |
 | `src/app.rs` | System-tray UI and menu. |
 | `.github/workflows/build.yml` | Windows CI build + release. |
@@ -279,9 +296,11 @@ arrive after it starts, so it never re-reads your notification backlog.
 
 **2026-07-15 — Startup shortcut, embedded help & sensible defaults**
 - Offers to **start automatically at sign-in** on first run (asks once; skipped if the shortcut already exists).
-- The HTML help is now **built into the exe** — open it from *Open help (README)* in the menu.
-- Sensible default mute list: noisy system apps are muted out of the box; **Microsoft Teams**, Outlook and WhatsApp are read (Teams is no longer muted by default).
-- *Speak emojis* moved below *Lower other apps while speaking*; startup hint window now hugs the bottom-right corner on any resolution.
+- The HTML help is now **built into the exe** — open it from *About / Help* in the menu.
+- Expanded, **sensible default mute list**: noisy system / utility / sync / security / hardware apps are muted out of the box; **Microsoft Teams**, Outlook and WhatsApp are read (Teams is no longer muted by default).
+- **Regex app muting**: a *Filter messages* block rule matches the app name too, so `(?i)vpn|antivirus|onedrive` silences whole app families.
+- Renamed the *Filter apps* menu to **Mute apps**; *Pause during calls/meetings* is now a single toggle "(mic or camera in use)"; *About* and help merged into **About / Help**; *Speak emojis* moved below *Lower other apps while speaking*.
+- The startup hint arrow now points at the **real tray-icon location** (via `Shell_NotifyIconGetRect`) instead of a guessed corner.
 
 **2026-07-14 — Meetings, audio ducking & diagnostics**
 - Audio ducking: lowers other apps' volume while speaking (on by default).

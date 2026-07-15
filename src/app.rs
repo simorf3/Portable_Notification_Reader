@@ -51,6 +51,30 @@ const SPEED_PRESETS: &[(&str, i32)] = &[
 /// Phrase spoken when previewing / testing a voice.
 const SAMPLE_TEXT: &str = "Hello, this is a preview of the selected notification voice.";
 
+/// Ask the Windows shell for the exact on-screen rectangle of our tray icon.
+///
+/// `native-windows-gui` registers the icon with `hWnd = <message window>` and
+/// `uID = 0`, so `Shell_NotifyIconGetRect` can return its precise location.
+/// Returns `(left, top, right, bottom)` in screen pixels, or `None` if the
+/// shell can't resolve it (e.g. the icon is momentarily not placed yet — we
+/// then fall back to a heuristic corner position). If the icon lives in the
+/// hidden-icons flyout, this returns the chevron/overflow button rect, which is
+/// still exactly where the user needs to look, so the hint is still correct.
+fn tray_icon_rect(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::Shell::{Shell_NotifyIconGetRect, NOTIFYICONIDENTIFIER};
+    let id = NOTIFYICONIDENTIFIER {
+        cbSize: std::mem::size_of::<NOTIFYICONIDENTIFIER>() as u32,
+        hWnd: HWND(hwnd as *mut core::ffi::c_void),
+        uID: 0,
+        guidItem: windows::core::GUID::zeroed(),
+    };
+    match unsafe { Shell_NotifyIconGetRect(&id) } {
+        Ok(r) => Some((r.left, r.top, r.right, r.bottom)),
+        Err(_) => None,
+    }
+}
+
 /// An action attached to a menu item and dispatched when it is clicked.
 #[derive(Clone)]
 enum Action {
@@ -68,7 +92,6 @@ enum Action {
     ToggleDuck,
     OpenFolder,
     OpenLog,
-    OpenReadme,
     About,
     Exit,
 }
@@ -382,13 +405,29 @@ impl App {
         let ah: i32 = 120;
         let screen_w = nwg::Monitor::width();
         let screen_h = nwg::Monitor::height();
-        // Sit in the very bottom-right corner, just above the taskbar, so the
-        // down-right arrow points straight at the tray-icon / overflow area.
-        // Small fixed margins keep it hugging the corner on any resolution
-        // (the previous large offsets pushed it into the middle-left on lower
-        // resolutions). Clamp so we never go off-screen on tiny displays.
-        let ax = (screen_w - aw - 30).max(0);
-        let ay = (screen_h - ah - 70).max(0);
+        // The big \u2198 arrow lives at window-relative (250, 60); its visible tip
+        // sits near (314, 108). We position the hint so that tip lands right on
+        // our real tray icon, which we look up with Shell_NotifyIconGetRect.
+        const TIP_X: i32 = 314;
+        const TIP_Y: i32 = 108;
+        let hwnd_isize = window.handle.hwnd().map(|h| h as isize).unwrap_or(0);
+        let (ax, ay) = match tray_icon_rect(hwnd_isize) {
+            Some((left, top, right, _bottom)) => {
+                let icx = (left + right) / 2;
+                // Aim the arrow tip at the horizontal centre of the icon and
+                // just above its top edge, so it visibly points down onto it.
+                let ax = (icx - TIP_X).clamp(0, (screen_w - aw).max(0));
+                let ay = (top - 2 - TIP_Y).clamp(0, (screen_h - ah).max(0));
+                (ax, ay)
+            }
+            // Fallback: shell couldn't resolve the icon. Sit above-and-left of
+            // the corner so the arrow points back onto the tray-icon cluster
+            // (roughly ~300 px in from the right edge on a normal taskbar).
+            None => (
+                (screen_w - aw - 290).max(0),
+                (screen_h - ah - 55).max(0),
+            ),
+        };
 
         let mut awindow = nwg::Window::default();
         nwg::Window::builder()
@@ -638,6 +677,24 @@ impl App {
         }
     }
 
+    /// Write the embedded HTML help next to the exe and open it in the user's
+    /// default browser. Invoked from the About / Help dialog.
+    fn open_readme(&self) {
+        let path = Config::app_dir().join("README.html");
+        match std::fs::write(&path, README_HTML) {
+            Ok(()) => {
+                let _ = std::process::Command::new("explorer.exe").arg(&path).spawn();
+            }
+            Err(e) => {
+                nwg::modal_error_message(
+                    &self.window.handle,
+                    "Portable Notification Reader",
+                    &format!("Could not open the help file:\n\n{e}"),
+                );
+            }
+        }
+    }
+
     fn apply(&self, action: Action) {
         match action {
             Action::ToggleEnabled => self.with_cfg(|c| c.enabled = !c.enabled),
@@ -676,32 +733,22 @@ impl App {
                     .arg(crate::logging::log_path(&Config::app_dir()))
                     .spawn();
             }
-            Action::OpenReadme => {
-                // Extract the embedded HTML help next to the exe and open it in
-                // the user's default browser.
-                let path = Config::app_dir().join("README.html");
-                match std::fs::write(&path, README_HTML) {
-                    Ok(()) => {
-                        let _ = std::process::Command::new("explorer.exe").arg(&path).spawn();
-                    }
-                    Err(e) => {
-                        nwg::modal_error_message(
-                            &self.window.handle,
-                            "Portable Notification Reader",
-                            &format!("Could not open the help file:\n\n{e}"),
-                        );
-                    }
-                }
-            }
             Action::About => {
-                nwg::modal_info_message(
-                    &self.window.handle,
-                    "About Portable Notification Reader",
-                    "Portable Notification Reader\n\n\
-                     Reads your Windows notifications aloud using online neural voices \
-                     (with an offline fallback).\n\n\
-                     Left- or right-click the tray icon for the menu.",
-                );
+                // About box doubles as the help entry point: it offers to open
+                // the full illustrated guide (the README, built into the exe).
+                let params = nwg::MessageParams {
+                    title: "About / Help \u{2013} Portable Notification Reader",
+                    content: "Portable Notification Reader\n\n\
+                        Reads your Windows notifications aloud using online neural voices \
+                        (with an offline fallback).\n\n\
+                        Left- or right-click the tray icon for the menu.\n\n\
+                        Would you like to open the full help guide (README) in your browser?",
+                    buttons: nwg::MessageButtons::YesNo,
+                    icons: nwg::MessageIcons::Info,
+                };
+                if nwg::modal_message(&self.window.handle, &params) == nwg::MessageChoice::Yes {
+                    self.open_readme();
+                }
             }
             Action::Exit => {
                 // Remove the tray icon and terminate immediately so the process
@@ -914,34 +961,15 @@ impl App {
             Some(Action::ToggleEnabled),
             true,
         );
-        // ---- Pause during calls/meetings (hover to see how it works) ----
-        // Windows tray (pop-up) menus can't show real per-item tooltips, so the
-        // explanation lives inside this submenu: hovering the item reveals it,
-        // and the last entry toggles the feature on/off.
-        let pause_menu = add_submenu(
-            &mut menus,
-            root_h,
-            if pause_on_mic {
-                "\u{2714} Pause during calls/meetings"
-            } else {
-                "\u{2610} Pause during calls/meetings"
-            },
-        );
-        add_item(&mut items, &mut actions, pause_menu, "How it works:", None, false);
-        add_item(&mut items, &mut actions, pause_menu, "    Stops reading aloud while any app is using", None, false);
-        add_item(&mut items, &mut actions, pause_menu, "    your microphone or camera (Teams, Zoom,", None, false);
-        add_item(&mut items, &mut actions, pause_menu, "    Slack, Meet, Discord\u{2026}), then resumes after.", None, false);
-        add_item(&mut items, &mut actions, pause_menu, "    Uses Windows privacy settings \u{2013} no admin", None, false);
-        add_item(&mut items, &mut actions, pause_menu, "    rights and no audio/video device is opened.", None, false);
-        add_sep(&mut seps, pause_menu);
+        // ---- Pause during calls/meetings (single toggle) ----
         add_item(
             &mut items,
             &mut actions,
-            pause_menu,
+            root_h,
             if pause_on_mic {
-                "\u{2714} On \u{2013} click to turn off"
+                "\u{2714} Pause during calls/meetings (mic or camera in use)"
             } else {
-                "\u{2610} Off \u{2013} click to turn on"
+                "\u{2610} Pause during calls/meetings (mic or camera in use)"
             },
             Some(Action::TogglePauseOnMic),
             true,
@@ -1048,7 +1076,7 @@ impl App {
         }
 
         // ---- Apps submenu (per-app mute) ----
-        let apps_menu = add_submenu(&mut menus, root_h, "Filter apps");
+        let apps_menu = add_submenu(&mut menus, root_h, "Mute apps");
         if known_apps.is_empty() {
             add_item(&mut items, &mut actions, apps_menu, "No apps seen yet", None, false);
         } else {
@@ -1083,8 +1111,7 @@ impl App {
         add_sep(&mut seps, root_h);
         add_item(&mut items, &mut actions, root_h, "Open app folder", Some(Action::OpenFolder), true);
         add_item(&mut items, &mut actions, root_h, "Open diagnostics log", Some(Action::OpenLog), true);
-        add_item(&mut items, &mut actions, root_h, "Open help (README)", Some(Action::OpenReadme), true);
-        add_item(&mut items, &mut actions, root_h, "About", Some(Action::About), true);
+        add_item(&mut items, &mut actions, root_h, "About / Help", Some(Action::About), true);
         add_sep(&mut seps, root_h);
         add_item(&mut items, &mut actions, root_h, "Exit", Some(Action::Exit), true);
 

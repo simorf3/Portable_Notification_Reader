@@ -62,4 +62,5 @@ features = [
     "Win32_System_SystemServices",
     "Win32_System_Threading",
     "Win32_Media_Audio",
+    "Win32_UI_Shell",
 ]
