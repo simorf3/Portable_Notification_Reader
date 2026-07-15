@@ -117,6 +117,12 @@
       <em>Open diagnostics log</em> in the tray menu.</li>
   <li><strong>Smart speech shaping</strong>: the app name is never read aloud; WhatsApp group names are skipped
       (only “Sender: message” is read); URLs are replaced with friendly “domain link” text.</li>
+  <li><strong>Start automatically at sign-in</strong> — on first run the app offers to add itself to your Windows Startup
+      folder (asked only once; skipped if a shortcut already exists).</li>
+  <li><strong>Built-in help</strong> — this page is compiled into the exe; open it any time from <em>Open help (README)</em>
+      in the tray menu (single portable file, nothing extra to keep).</li>
+  <li><strong>Sensible defaults</strong> — noisy system sources (Windows Security, Snipping Tool, Windows settings…) are
+      muted out of the box, while communication apps such as Microsoft Teams, Outlook and WhatsApp are read.</li>
   <li>Left-click <strong>or</strong> right-click the tray icon to open the menu.</li>
 </ul>
 
@@ -192,7 +198,7 @@ into your Startup folder (<code>Win</code>+<code>R</code> → <code>shell:startu
   "speak_emojis": false,
   "pause_on_mic": true,
   "duck_while_speaking": true,
-  "muted_apps": ["Microsoft Teams"],
+  "muted_apps": ["Windows Security", "Snipping Tool", "immersivecontrolpanel"],
   "known_apps": ["WhatsApp", "Microsoft Teams", "Mail"],
   "filters": [
     { "pattern": "verification code", "is_regex": false, "block": true },
@@ -246,7 +252,20 @@ filters, in order, before speaking.</p>
 <h2 class="changelog">Changelog</h2>
 <div class="changelog">
 
-  <h3><span class="tag">Latest</span> Meetings, audio ducking &amp; diagnostics <span class="date">2026-07</span></h3>
+  <h3><span class="tag">Latest</span> Startup shortcut, embedded help &amp; sensible defaults <span class="date">2026-07-15</span></h3>
+  <ul>
+    <li><strong>New:</strong> On first run the app offers to <strong>start automatically when you sign in</strong> (creates a
+        shortcut in your Startup folder). It only asks once and never asks if the shortcut already exists.</li>
+    <li><strong>New:</strong> This help page is now <strong>built into the exe</strong> — open it any time from
+        <em>Open help (README)</em> in the menu; no separate file to keep.</li>
+    <li><strong>Changed:</strong> Sensible default mute list — noisy system sources (Windows Security, Snipping Tool,
+        Windows settings, etc.) are muted out of the box, while communication apps such as <strong>Microsoft Teams</strong>,
+        Outlook and WhatsApp are read. (Teams is no longer muted by default.)</li>
+    <li><strong>UI:</strong> <em>Speak emojis</em> now sits just below <em>Lower other apps while speaking</em>.</li>
+    <li><strong>Fix:</strong> Startup hint window now hugs the bottom-right corner next to the tray on any screen resolution.</li>
+  </ul>
+
+  <h3>Meetings, audio ducking &amp; diagnostics <span class="date">2026-07-14</span></h3>
   <ul>
     <li><strong>New:</strong> Lower other apps’ volume while speaking (audio ducking), on by default — the app no longer talks
         over a YouTube video, music or a game.</li>

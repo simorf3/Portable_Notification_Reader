@@ -13,6 +13,7 @@ pub mod locale;
 pub mod logging;
 pub mod mic;
 pub mod notifications;
+pub mod startup;
 pub mod text_shaping;
 pub mod voices;
 

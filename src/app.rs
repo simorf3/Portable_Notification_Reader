@@ -31,6 +31,11 @@ const ARROW_HINT_SECS: u64 = 6;
 /// Icon shown in the tray (compiled into the executable → nothing to ship).
 const ICON_BYTES: &[u8] = include_bytes!("../assets/app.ico");
 
+/// The full HTML help/README, compiled into the executable so the portable
+/// build stays a single file. "Open help (README)" writes it next to the exe
+/// and opens it in the default browser.
+const README_HTML: &str = include_str!("../README.html");
+
 /// Volume presets offered in the menu (percent). Values >100 amplify.
 const VOLUME_PRESETS: &[u32] = &[50, 80, 100, 130, 150, 180, 200];
 
@@ -63,6 +68,7 @@ enum Action {
     ToggleDuck,
     OpenFolder,
     OpenLog,
+    OpenReadme,
     About,
     Exit,
 }
@@ -376,12 +382,13 @@ impl App {
         let ah: i32 = 120;
         let screen_w = nwg::Monitor::width();
         let screen_h = nwg::Monitor::height();
-        // Sit well up and to the left of the far-right corner so the arrow
-        // points at the general tray-icon area (which lives to the LEFT of the
-        // clock/date) rather than at the clock itself. Clamp so we never go
-        // off-screen on small displays.
-        let ax = (screen_w - aw - 430).max(0);
-        let ay = (screen_h - ah - 320).max(0);
+        // Sit in the very bottom-right corner, just above the taskbar, so the
+        // down-right arrow points straight at the tray-icon / overflow area.
+        // Small fixed margins keep it hugging the corner on any resolution
+        // (the previous large offsets pushed it into the middle-left on lower
+        // resolutions). Clamp so we never go off-screen on tiny displays.
+        let ax = (screen_w - aw - 30).max(0);
+        let ay = (screen_h - ah - 70).max(0);
 
         let mut awindow = nwg::Window::default();
         nwg::Window::builder()
@@ -669,6 +676,23 @@ impl App {
                     .arg(crate::logging::log_path(&Config::app_dir()))
                     .spawn();
             }
+            Action::OpenReadme => {
+                // Extract the embedded HTML help next to the exe and open it in
+                // the user's default browser.
+                let path = Config::app_dir().join("README.html");
+                match std::fs::write(&path, README_HTML) {
+                    Ok(()) => {
+                        let _ = std::process::Command::new("explorer.exe").arg(&path).spawn();
+                    }
+                    Err(e) => {
+                        nwg::modal_error_message(
+                            &self.window.handle,
+                            "Portable Notification Reader",
+                            &format!("Could not open the help file:\n\n{e}"),
+                        );
+                    }
+                }
+            }
             Action::About => {
                 nwg::modal_info_message(
                     &self.window.handle,
@@ -927,20 +951,20 @@ impl App {
             &mut items,
             &mut actions,
             root_h,
-            if speak_emojis { "\u{2714} Speak emojis" } else { "\u{2610} Speak emojis" },
-            Some(Action::ToggleSpeakEmojis),
-            true,
-        );
-        add_item(
-            &mut items,
-            &mut actions,
-            root_h,
             if duck_while_speaking {
                 "\u{2714} Lower other apps while speaking"
             } else {
                 "\u{2610} Lower other apps while speaking"
             },
             Some(Action::ToggleDuck),
+            true,
+        );
+        add_item(
+            &mut items,
+            &mut actions,
+            root_h,
+            if speak_emojis { "\u{2714} Speak emojis" } else { "\u{2610} Speak emojis" },
+            Some(Action::ToggleSpeakEmojis),
             true,
         );
         add_sep(&mut seps, root_h);
@@ -1059,6 +1083,7 @@ impl App {
         add_sep(&mut seps, root_h);
         add_item(&mut items, &mut actions, root_h, "Open app folder", Some(Action::OpenFolder), true);
         add_item(&mut items, &mut actions, root_h, "Open diagnostics log", Some(Action::OpenLog), true);
+        add_item(&mut items, &mut actions, root_h, "Open help (README)", Some(Action::OpenReadme), true);
         add_item(&mut items, &mut actions, root_h, "About", Some(Action::About), true);
         add_sep(&mut seps, root_h);
         add_item(&mut items, &mut actions, root_h, "Exit", Some(Action::Exit), true);

@@ -52,6 +52,26 @@ fn default_voice() -> String {
     "online:en-ZA-LeahNeural".to_string()
 }
 
+/// Apps that are muted out of the box on a fresh install. These are noisy
+/// Windows system / utility sources that most people do not want read aloud.
+/// Communication apps (Teams, Outlook, WhatsApp, etc.) are intentionally left
+/// ON so their messages are spoken. Matching is case-insensitive.
+fn default_muted_apps() -> Vec<String> {
+    [
+        "immersivecontrolpanel",
+        "Windows Security",
+        "Security Center",
+        "Security and Maintenance",
+        "Snipping Tool",
+        "Microsoft Store",
+        "Support Assist for PCs",
+        "Windows Update",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -100,7 +120,7 @@ impl Default for Config {
             rate: 0,
             volume: default_volume(),
             show_all_languages: false,
-            muted_apps: Vec::new(),
+            muted_apps: default_muted_apps(),
             known_apps: Vec::new(),
             filters: Vec::new(),
             replacements: Vec::new(),

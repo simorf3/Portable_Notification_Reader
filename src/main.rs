@@ -8,14 +8,27 @@
 
 #[cfg(windows)]
 fn main() {
-    use portable_notification_reader::{app, config::Config, logging, worker};
+    use portable_notification_reader::{app, config::Config, logging, startup, worker};
     use std::sync::{Arc, Mutex};
 
     // Start a fresh diagnostic log next to the executable.
     logging::init(&Config::app_dir());
 
+    // First run = no config.json has been written yet.
+    let first_run = !Config::config_path().exists();
+
     // Shared state between the UI thread and the worker thread.
     let cfg = Arc::new(Mutex::new(Config::load()));
+
+    if first_run {
+        // Persist defaults so the next launch is not treated as a first run.
+        if let Ok(c) = cfg.lock() {
+            let _ = c.save();
+        }
+        // Offer to start automatically at sign-in (only asked once; skipped
+        // entirely if a startup shortcut already exists).
+        startup::prompt_on_first_run();
+    }
     let catalog = Arc::new(Mutex::new(worker::VoiceCatalog::default()));
     let say_queue: worker::SayQueue = Arc::new(Mutex::new(Vec::new()));
     // Slot the UI writes into when the user hovers a voice (latest wins).

@@ -50,6 +50,7 @@ native-windows-derive = "1.0.5"
 tts = "0.26.3"
 rodio = "0.20"
 winreg = "0.52"
+mslnk = "0.1.8"
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"

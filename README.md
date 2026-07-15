@@ -64,6 +64,15 @@ It is a ground-up **Rust** rewrite of the original C# app, redesigned to be
     “Sender: message” body is read;
   - for a one-on-one chat the contact/title is kept;
   - **URLs are replaced** with friendly "domain link" text (e.g. "instagram link").
+- **Start automatically at sign-in** — on first run the app offers to add
+  itself to your Windows Startup folder (asked only once; skipped if a shortcut
+  already exists).
+- **Built-in help** — this README is compiled into the exe; open it any time
+  from *Open help (README)* in the tray menu (single portable file, nothing
+  extra to keep).
+- **Sensible defaults** — noisy system sources (Windows Security, Snipping Tool,
+  Windows settings, etc.) are muted out of the box, while communication apps
+  such as Microsoft Teams, Outlook and WhatsApp are read.
 - Left-click **or** right-click the tray icon to open the menu.
 
 ---
@@ -176,7 +185,7 @@ Created next to the executable. Example:
   "speak_emojis": false,
   "pause_on_mic": true,
   "duck_while_speaking": true,
-  "muted_apps": ["Microsoft Teams"],
+  "muted_apps": ["Windows Security", "Snipping Tool", "immersivecontrolpanel"],
   "known_apps": ["WhatsApp", "Microsoft Teams", "Mail"],
   "filters": [
     { "pattern": "verification code", "is_regex": false, "block": true },
@@ -261,6 +270,28 @@ arrive after it starts, so it never re-reads your notification backlog.
 | `src/worker.rs` | Background polling/speaking thread. |
 | `src/app.rs` | System-tray UI and menu. |
 | `.github/workflows/build.yml` | Windows CI build + release. |
+
+---
+
+## Changelog
+
+> The styled [README.html](README.html) has the full, formatted changelog. Summary:
+
+**2026-07-15 — Startup shortcut, embedded help & sensible defaults**
+- Offers to **start automatically at sign-in** on first run (asks once; skipped if the shortcut already exists).
+- The HTML help is now **built into the exe** — open it from *Open help (README)* in the menu.
+- Sensible default mute list: noisy system apps are muted out of the box; **Microsoft Teams**, Outlook and WhatsApp are read (Teams is no longer muted by default).
+- *Speak emojis* moved below *Lower other apps while speaking*; startup hint window now hugs the bottom-right corner on any resolution.
+
+**2026-07-14 — Meetings, audio ducking & diagnostics**
+- Audio ducking: lowers other apps' volume while speaking (on by default).
+- Pause during calls/meetings now detects the camera as well as the microphone (default on).
+- Diagnostics log (`notification-reader.log`) + *Open diagnostics log* menu item.
+
+**2026-07-13 — Emoji, shorthand, text rules & initial release**
+- Speak-emojis toggle, chat-shorthand expansion, block/allow filter rules, text filtering & replacement editor.
+- URLs spoken as friendly "domain link" text; real app names; hover-to-preview voices.
+- Initial portable release: tray UI, Edge neural TTS (SA voices), offline SAPI fallback, read-only DB polling, volume/speed control.
 
 ---
 
