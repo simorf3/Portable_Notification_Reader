@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portable Notification Reader</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --accent: #0969da; --code-bg: #f6f8fa; --card: #f6f8fa; --tip: #ddf4ff;
+    --warn: #fff8c5; --warn-border: #d4a72c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d;
+      --accent: #4493f8; --code-bg: #161b22; --card: #161b22; --tip: #0b2b40;
+      --warn: #2d2600; --warn-border: #9e7a00;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6; color: var(--fg); background: var(--bg);
+    max-width: 900px; margin: 0 auto; padding: 2rem 1.25rem 5rem;
+  }
+  h1 { font-size: 2rem; border-bottom: 2px solid var(--border); padding-bottom: .4rem; }
+  h2 { font-size: 1.45rem; margin-top: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom: .3rem; }
+  h3 { font-size: 1.15rem; margin-top: 1.6rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--code-bg); padding: .15em .4em; border-radius: 6px; font-size: .88em;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem; overflow-x: auto;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .55rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--card); }
+  .lead { font-size: 1.1rem; color: var(--muted); }
+  .callout { border-radius: 8px; padding: .9rem 1.1rem; margin: 1.2rem 0; border: 1px solid var(--border); }
+  .callout.tip { background: var(--tip); }
+  .callout.warn { background: var(--warn); border-color: var(--warn-border); }
+  .badges span {
+    display: inline-block; background: var(--card); border: 1px solid var(--border);
+    border-radius: 2em; padding: .15rem .7rem; font-size: .8rem; margin: .15rem .3rem .15rem 0; color: var(--muted);
+  }
+  ul li { margin: .25rem 0; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  .changelog h3 { display: flex; align-items: baseline; gap: .6rem; }
+  .changelog .date { font-size: .8rem; color: var(--muted); font-weight: normal; }
+  .tag {
+    font-size: .72rem; background: var(--accent); color: #fff; border-radius: 4px;
+    padding: .05rem .45rem; font-weight: 600;
+  }
+  footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+
+<h1>Portable Notification Reader</h1>
+<p class="lead">Reads your <strong>Windows 11 notifications aloud</strong> using natural, online neural voices
+(with an offline fallback), controlled entirely from a small <strong>system-tray icon</strong>.</p>
+
+<div class="badges">
+  <span>Single portable .exe</span>
+  <span>No installer</span>
+  <span>No admin rights</span>
+  <span>Rust</span>
+  <span>Windows 10/11 (64-bit)</span>
+</div>
+
+<p>It is a ground-up <strong>Rust</strong> rewrite of the original C# app, redesigned to be <strong>100% portable</strong>:</p>
+<ul>
+  <li>A <strong>single <code>.exe</code></strong> — no installer, no MSIX package, no admin rights.</li>
+  <li>All settings live in <strong><code>config.json</code> next to the executable</strong>. Nothing is written to the
+      registry or AppData. Copy the folder to a USB stick and it runs anywhere.</li>
+  <li>Notifications are read by <strong>polling the Windows notification database directly</strong>
+      (<code>%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db</code>), so the app needs
+      <strong>no package identity</strong> and no <code>UserNotificationListener</code> registration — exactly what makes a
+      portable, unpackaged build possible.</li>
+</ul>
+
+<hr>
+
+<h2>Features</h2>
+<ul>
+  <li><strong>Speaks new toast notifications</strong> as they arrive (polls once per second by default; configurable).</li>
+  <li><strong>Full online neural voice catalogue</strong> (Microsoft Edge voices) fetched live, including the
+      <strong>South-African voices</strong>: <code>en-ZA</code> (Leah, Luke), <code>af-ZA</code> (Adri, Willem) and
+      <code>zu-ZA</code> (Thando, Themba).</li>
+  <li><strong>Voices filtered by your Windows display language</strong> by default, with a <strong>“Show all languages”</strong>
+      toggle to reveal the entire catalogue.</li>
+  <li><strong>Offline SAPI voices</strong> are always available and are used automatically when there is no internet.</li>
+  <li><strong>Volume with loudness boost</strong> — 0–200%. Values above 100% amplify the audio <em>louder than the system
+      default</em> (online voices only).</li>
+  <li><strong>Speaking speed</strong> control with friendly presets (Very slow → Very fast).</li>
+  <li><strong>Pause during calls/meetings</strong> — on by default. Keeps the app quiet while any app is using the
+      <strong>microphone or camera</strong> (Teams, Zoom, Slack Huddles, Meet, Discord…), so it never talks over you.
+      Uses the Windows privacy consent store — no admin rights, no audio/video device is opened.</li>
+  <li><strong>Lower other apps while speaking (audio ducking)</strong> — on by default. Briefly turns the volume of other
+      apps (a YouTube video, music, a game) down while a notification is read, then restores it. So a notification is
+      never buried under, or shouted over, your media.</li>
+  <li><strong>Per-app mute</strong> — any app that has sent a notification appears in the <em>Filter apps</em> menu and can
+      be muted/unmuted with a click.</li>
+  <li><strong>Filter rules</strong> — block or allow notifications by substring or regex (top-level <em>Filter messages…</em>).</li>
+  <li><strong>Text filtering and replacement</strong> — remove or replace words/phrases before speaking (plain or regex).
+      Leave the replacement blank to simply delete the matched text.</li>
+  <li><strong>Emoji handling</strong> — toggle <strong>Speak emojis</strong> to hear emoji meanings (🎉 → “party popper”),
+      or leave it off to strip them silently. Full Unicode CLDR coverage including multi-part sequences.</li>
+  <li><strong>Shorthand expansion</strong> — common chat abbreviations (lol, brb, omg…) are expanded before speaking.</li>
+  <li><strong>Diagnostics log</strong> — every notification and what the app decided to do with it (spoken, muted,
+      filtered, skipped…) is written to <code>notification-reader.log</code>. Open it any time from
+      <em>Open diagnostics log</em> in the tray menu.</li>
+  <li><strong>Smart speech shaping</strong>: the app name is never read aloud; WhatsApp group names are skipped
+      (only “Sender: message” is read); URLs are replaced with friendly “domain link” text.</li>
+  <li>Left-click <strong>or</strong> right-click the tray icon to open the menu.</li>
+</ul>
+
+<hr>
+
+<h2>Download / Build</h2>
+<p>This is a Windows GUI app and is built by <strong>GitHub Actions</strong> on a Windows runner (the authoritative build),
+because it uses Win32 / WinRT APIs that can’t be compiled on Linux/macOS.</p>
+<ol>
+  <li>Push to <code>main</code> (or use <strong>Actions → Run workflow</strong>). The workflow compiles a release build and
+      uploads <code>PortableNotificationReader.exe</code> (and a zip) as a <strong>build artifact</strong> — download it from
+      the newest run’s <em>Artifacts</em> section.</li>
+  <li>To cut a versioned release, push a tag like <code>v1.0.0</code>; the same binary is attached to a GitHub Release.</li>
+</ol>
+<p>To build locally on a Windows machine with the Rust toolchain:</p>
+<pre><code>rustup target add x86_64-pc-windows-msvc
+cargo build --release
+# -> target\release\PortableNotificationReader.exe</code></pre>
+
+<hr>
+
+<h2>⚠️ “Windows protected your PC” (SmartScreen)</h2>
+<p>When you first run the downloaded <code>.exe</code>, Windows may show a blue <strong>“Windows protected your PC”</strong>
+dialog from <em>Microsoft Defender SmartScreen</em>.</p>
+<div class="callout warn">
+  <strong>This is expected and the app is safe to run.</strong> SmartScreen flags <strong>any</strong> program that isn’t
+  signed with a paid code-signing certificate (US$200–500 <em>per year</em>). The warning is about the missing signature,
+  <em>not</em> anything the app does — the full source is in this repository.
+</div>
+<h3>How to run it anyway</h3>
+<ol>
+  <li>On the blue dialog, click <strong>More info</strong>.</li>
+  <li>Click the <strong>Run anyway</strong> button that appears.</li>
+</ol>
+<p>You only have to do this <strong>once per download</strong>.</p>
+<h3>Verify your download first (recommended)</h3>
+<p>Every release publishes the <strong>SHA-256 hash</strong> of the exe. Confirm your copy matches:</p>
+<pre><code>Get-FileHash .\PortableNotificationReader.exe -Algorithm SHA256</code></pre>
+<p>Compare the output to the hash on the <a href="../../releases">Releases</a> page.</p>
+
+<hr>
+
+<h2>Usage</h2>
+<ol>
+  <li>Put <code>PortableNotificationReader.exe</code> in any folder and run it. A tray icon appears; a small window near the
+      tray shows the app’s icon so you know what to look for, then closes itself. <code>config.json</code> is created next to
+      the exe on first save.</li>
+  <li>Click the tray icon and pick a <strong>Voice</strong>, set <strong>Volume/Speed</strong>, and toggle
+      <strong>Read notifications</strong>, <strong>Speak emojis</strong>, <strong>Pause during calls/meetings</strong> and
+      <strong>Lower other apps while speaking</strong> on/off.</li>
+  <li>Use <strong>Filter apps</strong> to mute specific applications, and the top-level <strong>Filter messages…</strong> /
+      <strong>Filter and replace text…</strong> items to block/allow notifications or rewrite text before speaking.</li>
+</ol>
+<div class="callout tip">
+  <strong>Tip:</strong> Windows only records a toast in the database when notifications for that app are enabled in
+  <em>Settings → System → Notifications</em>. If nothing is being read, first check the sending app is allowed to show
+  notifications — then open <em>Open diagnostics log</em> to see exactly what the reader saw.
+</div>
+<h3>Autostart (optional)</h3>
+<p>Because the app is portable it doesn’t register itself. To start it with Windows, drop a shortcut to the <code>.exe</code>
+into your Startup folder (<code>Win</code>+<code>R</code> → <code>shell:startup</code>).</p>
+
+<hr>
+
+<h2><code>config.json</code></h2>
+<p>Created next to the executable. Example:</p>
+<pre><code>{
+  "enabled": true,
+  "selected_voice_id": "online:en-ZA-LeahNeural",
+  "rate": 0,
+  "volume": 130,
+  "show_all_languages": false,
+  "speak_emojis": false,
+  "pause_on_mic": true,
+  "duck_while_speaking": true,
+  "muted_apps": ["Microsoft Teams"],
+  "known_apps": ["WhatsApp", "Microsoft Teams", "Mail"],
+  "filters": [
+    { "pattern": "verification code", "is_regex": false, "block": true },
+    { "pattern": "^Reminder:", "is_regex": true, "block": true }
+  ],
+  "replacements": [
+    { "pattern": "AI", "replacement": "Artificial Intelligence", "is_regex": false },
+    { "pattern": "\\[ERROR\\]", "replacement": "", "is_regex": true }
+  ],
+  "poll_interval_ms": 1000
+}</code></pre>
+<table>
+  <tr><th>Field</th><th>Meaning</th></tr>
+  <tr><td><code>selected_voice_id</code></td><td><code>online:{ShortName}</code> for a neural voice, or <code>sapi:{name}</code> for an offline voice.</td></tr>
+  <tr><td><code>rate</code></td><td>Speaking speed, <code>-10</code>..<code>10</code> (0 = normal).</td></tr>
+  <tr><td><code>volume</code></td><td><code>0</code>..<code>200</code>. <code>100</code> = normal; above <code>100</code> amplifies (louder than system).</td></tr>
+  <tr><td><code>show_all_languages</code></td><td><code>false</code> = only voices matching the Windows display language.</td></tr>
+  <tr><td><code>speak_emojis</code></td><td><code>false</code> (default) strips emojis; <code>true</code> speaks their meanings.</td></tr>
+  <tr><td><code>pause_on_mic</code></td><td><code>true</code> (default) keeps the app silent while on a call/in a meeting (any app using the microphone <strong>or</strong> camera). Set <code>false</code> to always read.</td></tr>
+  <tr><td><code>duck_while_speaking</code></td><td><code>true</code> (default) briefly lowers other apps’ volume while a notification is read. Set <code>false</code> to leave other audio untouched.</td></tr>
+  <tr><td><code>poll_interval_ms</code></td><td>How often the notification DB is polled (minimum 250 ms; 1000 ms recommended).</td></tr>
+  <tr><td><code>filters[].block</code></td><td><code>true</code> blocks matching notifications; <code>false</code> switches to allow-list mode.</td></tr>
+  <tr><td><code>replacements[]</code></td><td>Text filtering &amp; replacement rules. Empty <code>replacement</code> removes the match.</td></tr>
+</table>
+<p>Filter rules match against the app name <strong>and</strong> the notification text. Replacements are applied <strong>after</strong>
+filters, in order, before speaking.</p>
+
+<hr>
+
+<h2>Project layout</h2>
+<table>
+  <tr><th>Path</th><th>Purpose</th></tr>
+  <tr><td><code>src/config.rs</code></td><td>Portable <code>config.json</code> load/save.</td></tr>
+  <tr><td><code>src/notifications.rs</code></td><td>Reads/polls the Windows notification SQLite DB.</td></tr>
+  <tr><td><code>src/filter.rs</code></td><td>Block/allow rules + text filtering/replacement + URL cleaning.</td></tr>
+  <tr><td><code>src/text_shaping.rs</code></td><td>Shorthand expansion + emoji handling (speak or strip).</td></tr>
+  <tr><td><code>src/voices.rs</code></td><td>Full online voice catalogue + language filtering.</td></tr>
+  <tr><td><code>src/drm.rs</code> / <code>src/edge_tts.rs</code></td><td>Edge neural TTS auth + WebSocket synthesis.</td></tr>
+  <tr><td><code>src/speech.rs</code></td><td>Audio playback (online) + SAPI offline fallback.</td></tr>
+  <tr><td><code>src/locale.rs</code></td><td>Detects the Windows display language.</td></tr>
+  <tr><td><code>src/mic.rs</code></td><td>Detects whether the microphone or camera is in use — i.e. on a call/in a meeting.</td></tr>
+  <tr><td><code>src/audio_duck.rs</code></td><td>Lowers other apps’ volume while speaking, then restores it.</td></tr>
+  <tr><td><code>src/logging.rs</code></td><td>Writes the diagnostics log next to the exe.</td></tr>
+  <tr><td><code>src/worker.rs</code></td><td>Background polling/speaking thread.</td></tr>
+  <tr><td><code>src/app.rs</code></td><td>System-tray UI and menu.</td></tr>
+  <tr><td><code>.github/workflows/build.yml</code></td><td>Windows CI build + release.</td></tr>
+</table>
+
+<hr>
+
+<h2 class="changelog">Changelog</h2>
+<div class="changelog">
+
+  <h3><span class="tag">Latest</span> Meetings, audio ducking &amp; diagnostics <span class="date">2026-07</span></h3>
+  <ul>
+    <li><strong>New:</strong> Lower other apps’ volume while speaking (audio ducking), on by default — the app no longer talks
+        over a YouTube video, music or a game.</li>
+    <li><strong>New:</strong> Pause during calls/meetings now watches the <strong>camera as well as the microphone</strong>, so it
+        catches Teams / Zoom / Slack / Meet / Discord reliably. Default changed to <strong>on</strong>.</li>
+    <li><strong>New:</strong> Diagnostics log (<code>notification-reader.log</code>) + <em>Open diagnostics log</em> menu item —
+        shows exactly what happened to every notification (spoken, muted, filtered, skipped, no text…).</li>
+    <li><strong>UI:</strong> The <em>Pause during calls/meetings</em> item is now a submenu with a “how it works” explanation.</li>
+    <li><strong>UI:</strong> Speed submenu shows the preset name (e.g. “Speed (Normal)”) instead of a raw number.</li>
+    <li><strong>UI:</strong> Startup hint window now shows the app’s own icon and sits nearer the tray icons.</li>
+  </ul>
+
+  <h3>Filter-apps rename &amp; menu flattening <span class="date">2026-07-14</span></h3>
+  <ul>
+    <li>Renamed the <em>Disable apps</em> menu to <strong>Filter apps</strong>.</li>
+    <li>Moved <em>Filter messages…</em> and <em>Filter and replace text…</em> to the top level (no more <em>Filters</em> submenu).</li>
+    <li>Added a startup hint window pointing at the tray icon; auto-closes after a few seconds.</li>
+    <li>Introduced the microphone-pause feature (later extended to camera; see Latest).</li>
+  </ul>
+
+  <h3>Emoji, shorthand &amp; text rules <span class="date">2026-07-13</span></h3>
+  <ul>
+    <li>Added <strong>Speak emojis</strong> toggle with full Unicode CLDR meanings, and automatic chat-shorthand expansion.</li>
+    <li>Added block/allow <strong>filter rules</strong> and a combined <strong>text filtering &amp; replacement</strong> editor.</li>
+    <li>URLs are spoken as friendly “domain link” text.</li>
+    <li>Real app names in the menu; hover-to-preview voices; clean shutdown.</li>
+    <li>SmartScreen guidance, SHA-256 verification, and optional free self-signing.</li>
+    <li>Embedded the app manifest (Common Controls v6) to fix a startup crash.</li>
+  </ul>
+
+  <h3>Initial release <span class="date">2026-07-13</span></h3>
+  <ul>
+    <li>Portable Rust notification reader: tray UI, Edge neural TTS (with SA voices), offline SAPI fallback,
+        read-only notification-DB polling, volume boost and speed control.</li>
+  </ul>
+
+</div>
+
+<hr>
+
+<h2>License</h2>
+<p>See <a href="LICENSE">LICENSE</a>.</p>
+
+<footer>Portable Notification Reader — generated documentation. For the source of truth, browse the <code>src/</code> folder.</footer>
+
+</body>
+</html>

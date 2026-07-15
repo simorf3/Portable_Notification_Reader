@@ -8,8 +8,11 @@
 
 #[cfg(windows)]
 fn main() {
-    use portable_notification_reader::{app, config::Config, worker};
+    use portable_notification_reader::{app, config::Config, logging, worker};
     use std::sync::{Arc, Mutex};
+
+    // Start a fresh diagnostic log next to the executable.
+    logging::init(&Config::app_dir());
 
     // Shared state between the UI thread and the worker thread.
     let cfg = Arc::new(Mutex::new(Config::load()));

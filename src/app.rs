@@ -60,7 +60,9 @@ enum Action {
     TestVoice,
     ManageFilters,
     ManageReplacements,
+    ToggleDuck,
     OpenFolder,
+    OpenLog,
     About,
     Exit,
 }
@@ -656,9 +658,15 @@ impl App {
             }
             Action::ManageFilters => self.show_filters(),
             Action::ManageReplacements => self.show_replacements(),
+            Action::ToggleDuck => self.with_cfg(|c| c.duck_while_speaking = !c.duck_while_speaking),
             Action::OpenFolder => {
                 let _ = std::process::Command::new("explorer.exe")
                     .arg(Config::app_dir())
+                    .spawn();
+            }
+            Action::OpenLog => {
+                let _ = std::process::Command::new("notepad.exe")
+                    .arg(crate::logging::log_path(&Config::app_dir()))
                     .spawn();
             }
             Action::About => {
@@ -842,12 +850,13 @@ impl App {
         let mut seps: Vec<nwg::MenuSeparator> = Vec::new();
         let mut actions: Vec<(nwg::ControlHandle, Action)> = Vec::new();
 
-        let (enabled, speak_emojis, pause_on_mic, volume, rate, show_all, selected, known_apps, muted_apps, filters, n_replacements) = {
+        let (enabled, speak_emojis, pause_on_mic, duck_while_speaking, volume, rate, show_all, selected, known_apps, muted_apps, filters, n_replacements) = {
             let c = self.cfg.lock().unwrap();
             (
                 c.enabled,
                 c.speak_emojis,
                 c.pause_on_mic,
+                c.duck_while_speaking,
                 c.volume,
                 c.rate,
                 c.show_all_languages,
@@ -920,6 +929,18 @@ impl App {
             root_h,
             if speak_emojis { "\u{2714} Speak emojis" } else { "\u{2610} Speak emojis" },
             Some(Action::ToggleSpeakEmojis),
+            true,
+        );
+        add_item(
+            &mut items,
+            &mut actions,
+            root_h,
+            if duck_while_speaking {
+                "\u{2714} Lower other apps while speaking"
+            } else {
+                "\u{2610} Lower other apps while speaking"
+            },
+            Some(Action::ToggleDuck),
             true,
         );
         add_sep(&mut seps, root_h);
@@ -1037,6 +1058,7 @@ impl App {
         // ---- Footer ----
         add_sep(&mut seps, root_h);
         add_item(&mut items, &mut actions, root_h, "Open app folder", Some(Action::OpenFolder), true);
+        add_item(&mut items, &mut actions, root_h, "Open diagnostics log", Some(Action::OpenLog), true);
         add_item(&mut items, &mut actions, root_h, "About", Some(Action::About), true);
         add_sep(&mut seps, root_h);
         add_item(&mut items, &mut actions, root_h, "Exit", Some(Action::Exit), true);

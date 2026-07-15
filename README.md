@@ -1,5 +1,8 @@
 # Portable Notification Reader
 
+> 📖 **Prefer a nicely formatted version?** Open [`README.html`](README.html) in
+> any browser for the same documentation with styling, tables and a **changelog**.
+
 Reads your **Windows 11 notifications aloud** using natural, online neural voices
 (with an offline fallback), controlled entirely from a small **system-tray icon**.
 
@@ -33,7 +36,13 @@ It is a ground-up **Rust** rewrite of the original C# app, redesigned to be
   *louder than the system default* (online voices only).
 - **Speaking speed** control.
 - **Per-app mute** — any app that has sent a notification appears in the
-  *Disable apps* menu and can be muted/unmuted with a click.
+  *Filter apps* menu and can be muted/unmuted with a click.
+- **Lower other apps while speaking (audio ducking)** — on by default. Briefly
+  turns other apps (a video, music, a game) down while a notification is read,
+  then restores them, so notifications are never buried or talked over.
+- **Diagnostics log** — every notification and the app's decision (spoken,
+  muted, filtered, skipped…) is written to `notification-reader.log`; open it
+  from *Open diagnostics log* in the tray menu.
 - **Filter rules** — block or allow notifications by substring or regex.
 - **Text filtering and replacement** — remove or replace words/phrases before
   speaking (plain text or regex). Leave the replacement blank to simply delete
@@ -166,6 +175,7 @@ Created next to the executable. Example:
   "show_all_languages": false,
   "speak_emojis": false,
   "pause_on_mic": true,
+  "duck_while_speaking": true,
   "muted_apps": ["Microsoft Teams"],
   "known_apps": ["WhatsApp", "Microsoft Teams", "Mail"],
   "filters": [
@@ -190,6 +200,7 @@ Field notes:
 | `show_all_languages` | `false` = only voices matching the Windows display language. |
 | `speak_emojis` | `false` (default) strips emojis; `true` speaks their meanings (e.g. 🎉 → "party popper"). |
 | `pause_on_mic` | `true` (default) keeps the app silent while you are on a call/in a meeting (any app using the microphone **or** camera). Set `false` to always read. |
+| `duck_while_speaking` | `true` (default) lowers other apps' volume (music, videos, YouTube) while a notification is read, then restores it. Set `false` to leave other audio untouched. |
 | `poll_interval_ms` | How often the notification DB is polled (minimum 250 ms; 1000 ms recommended). |
 | `filters[].block` | `true` blocks matching notifications; `false` switches to allow-list mode. |
 | `replacements[]` | Text filtering & replacement rules. Empty `replacement` removes the match. |
@@ -245,6 +256,8 @@ arrive after it starts, so it never re-reads your notification backlog.
 | `src/speech.rs` | Audio playback (online) + SAPI offline fallback. |
 | `src/locale.rs` | Detects the Windows display language. |
 | `src/mic.rs` | Detects whether the microphone or camera is currently in use — i.e. on a call/in a meeting (registry). |
+| `src/audio_duck.rs` | Lowers other apps' audio sessions while speaking, restores them afterwards (Windows Core Audio). |
+| `src/logging.rs` | Writes the diagnostics log (`notification-reader.log`) next to the exe. |
 | `src/worker.rs` | Background polling/speaking thread. |
 | `src/app.rs` | System-tray UI and menu. |
 | `.github/workflows/build.yml` | Windows CI build + release. |

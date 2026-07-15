@@ -192,8 +192,17 @@ fn handle_notification(
         let _ = c.save();
     }
 
+    // Diagnostic line for every notification we see (helps track down apps that
+    // "pop up but aren't read"). Look for these in notification-reader.log.
+    log::info!(
+        "notification: app=\"{}\" id=\"{}\" text_parts={}",
+        n.app_display,
+        n.app_primary_id,
+        n.text_parts.len()
+    );
+
     // Snapshot the settings we need.
-    let (enabled, voice_id, gain, rate, muted, filters, replacements, speak_emojis, pause_on_mic) = {
+    let (enabled, voice_id, gain, rate, muted, filters, replacements, speak_emojis, pause_on_mic, duck) = {
         let c = cfg.lock().unwrap();
         (
             c.enabled,
@@ -205,19 +214,26 @@ fn handle_notification(
             c.replacements.clone(),
             c.speak_emojis,
             c.pause_on_mic,
+            c.duck_while_speaking,
         )
     };
 
-    if !enabled || muted {
+    if !enabled {
+        log::info!("  -> skipped: reading is turned off");
+        return;
+    }
+    if muted {
+        log::info!("  -> skipped: app \"{}\" is muted", n.app_display);
         return;
     }
 
     // Stay quiet while on a call / in a meeting (mic or camera in use), if enabled.
     if pause_on_mic && crate::mic::in_meeting() {
-        log::debug!("skipping notification: on a call / in a meeting (mic or camera in use)");
+        log::info!("  -> skipped: on a call / in a meeting (mic or camera in use)");
         return;
     }
     if n.text_parts.is_empty() {
+        log::info!("  -> skipped: no speakable text in the toast payload");
         return;
     }
 
@@ -225,6 +241,7 @@ fn handle_notification(
     // Filter against app name + the full text so existing rules keep working.
     let full_text = n.text_parts.join(" ");
     if !filter::passes_filters(&n.app_display, &format!("{spoken}\n{full_text}"), &filters) {
+        log::info!("  -> skipped: blocked by a filter rule");
         return;
     }
 
@@ -237,10 +254,20 @@ fn handle_notification(
     // Nothing left to say after shaping (e.g. an emoji-only message with
     // emojis turned off) – skip speaking silence.
     if spoken.trim().is_empty() {
+        log::info!("  -> skipped: nothing left to say after filtering/shaping");
         return;
     }
 
+    log::info!("  -> speaking: \"{spoken}\"");
     engine.set_gain(gain);
     engine.set_rate(rate);
+
+    // Turn other apps (video/music) down while we speak, then restore them when
+    // `_duck` is dropped at the end of this function.
+    let _duck = if duck {
+        crate::audio_duck::duck_other_apps(crate::audio_duck::DUCK_LEVEL)
+    } else {
+        None
+    };
     engine.speak(&voice_id, &spoken);
 }

@@ -4,11 +4,13 @@
 //! OS so the logic can be unit-tested off-Windows. The UI / audio / SAPI modules
 //! are Windows-only.
 
+pub mod audio_duck;
 pub mod config;
 pub mod drm;
 pub mod edge_tts;
 pub mod filter;
 pub mod locale;
+pub mod logging;
 pub mod mic;
 pub mod notifications;
 pub mod text_shaping;

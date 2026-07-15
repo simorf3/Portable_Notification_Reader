@@ -84,6 +84,10 @@ pub struct Config {
     /// meetings. Default on.
     #[serde(default = "default_true")]
     pub pause_on_mic: bool,
+    /// When true, other apps (video/music) are briefly turned down while a
+    /// notification is read, so the app never talks over them. Default on.
+    #[serde(default = "default_true")]
+    pub duck_while_speaking: bool,
     /// How often to poll the notification database, in milliseconds.
     pub poll_interval_ms: u64,
 }
@@ -102,6 +106,7 @@ impl Default for Config {
             replacements: Vec::new(),
             speak_emojis: false,
             pause_on_mic: true,
+            duck_while_speaking: true,
             poll_interval_ms: default_poll(),
         }
     }
