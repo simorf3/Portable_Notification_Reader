@@ -44,6 +44,7 @@ jobs:
           Copy-Item "target\x86_64-pc-windows-msvc\release\PortableNotificationReader.exe" `
                     "dist\PortableNotificationReader.exe"
           Copy-Item "README.md"  "dist\README.md"
+          Copy-Item "README.html" "dist\README.html"
           Copy-Item "LICENSE"    "dist\LICENSE.txt"
 
       # --- Optional code signing --------------------------------------------
