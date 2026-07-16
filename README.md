@@ -179,6 +179,15 @@ match, the file is exactly what the CI built.
 > that app are enabled in *Settings → System → Notifications*. If nothing is
 > being read, check that the sending app is allowed to show notifications.
 
+> **⚠️ Microsoft Teams (desktop app) limitation:** The **new Teams** (v2) desktop
+> app uses proprietary in-app notifications that deliberately bypass the Windows
+> notification platform, so they never reach the database this app reads.
+> **Workaround:** Use the **Teams PWA** (Progressive Web App) instead — in Edge or
+> Chrome, visit `teams.microsoft.com` and install it as an app (**menu → Apps →
+> Install this site as an app**). The PWA's notifications flow through Windows
+> normally and are read correctly. (Classic Teams had a "Windows" notification
+> style that worked, but it's end-of-life.)
+
 ### Autostart (optional)
 
 Because the app is portable it doesn’t register itself. To start it with

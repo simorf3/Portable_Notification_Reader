@@ -193,6 +193,14 @@ dialog from <em>Microsoft Defender SmartScreen</em>.</p>
   <em>Settings → System → Notifications</em>. If nothing is being read, first check the sending app is allowed to show
   notifications — then open <em>Open diagnostics log</em> to see exactly what the reader saw.
 </div>
+<div class="callout warn">
+  <strong>⚠️ Microsoft Teams (desktop app) limitation:</strong> The <strong>new Teams</strong> (v2) desktop app uses
+  proprietary in-app notifications that deliberately bypass the Windows notification platform, so they never reach the
+  database this app reads. <strong>Workaround:</strong> Use the <strong>Teams PWA</strong> (Progressive Web App) instead — in
+  Edge or Chrome, visit <code>teams.microsoft.com</code> and install it as an app (<strong>menu → Apps → Install this site as
+  an app</strong>). The PWA's notifications flow through Windows normally and are read correctly. (Classic Teams had a
+  "Windows" notification style that worked, but it's end-of-life.)
+</div>
 <h3>Autostart (optional)</h3>
 <p>Because the app is portable it doesn’t register itself. To start it with Windows, drop a shortcut to the <code>.exe</code>
 into your Startup folder (<code>Win</code>+<code>R</code> → <code>shell:startup</code>).</p>
