@@ -190,9 +190,12 @@ match, the file is exactly what the CI built.
 
 ### Autostart (optional)
 
-Because the app is portable it doesn’t register itself. To start it with
-Windows, drop a shortcut to the `.exe` into your Startup folder
-(`Win`+`R` → `shell:startup`).
+**On first run**, the app offers to add itself to your Windows Startup folder
+so it starts automatically when you sign in. It only asks once and skips the
+prompt if a shortcut already exists.
+
+You can also do it manually: drop a shortcut to the `.exe` into your Startup
+folder (`Win`+`R` → `shell:startup`).
 
 ---
 
